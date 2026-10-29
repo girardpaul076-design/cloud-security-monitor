@@ -114,3 +114,12 @@ Resources:
       Action: lambda:InvokeFunction
       Principal: ://amazonaws.com
       SourceArn: !GetAtt S3SecurityEventRule.Arn
+
+  # 8. Database to track our portfolio SIEM counter metrics
+  SiemMetricsTable:
+    Type: AWS::Serverless::SimpleTable
+    Properties:
+      TableName: SiemMetricsTable
+      PrimaryKey:
+        Name: metric_id
+        Type: String
