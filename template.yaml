@@ -78,7 +78,13 @@ Resources:
               Action:
                 - sns:Publish
               Resource: !Ref SecurityAlertTopic
-
+      Events:
+        GetMetricsApi:
+          Type: HttpApi
+          Properties:
+            Path: /metrics
+            Method: GET
+            
   # 6. Detection Rule Engine (EventBridge)
   S3SecurityEventRule:
     Type: AWS::Events::Rule

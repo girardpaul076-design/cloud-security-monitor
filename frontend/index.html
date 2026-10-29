@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloud Security SIEM Resume</title>
+    <style>
+        /* Modern Dark Theme SIEM Styling - Zero Internet Required */
+        body {
+            background-color: #111827;
+            color: #f3f4f6;
+            font-family: system-ui, -apple-system, sans-serif;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+        }
+        header {
+            background-color: #1f2937;
+            border-bottom: 1px solid #374151;
+            padding: 1rem;
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+        .nav-container {
+            max-w: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        h1 { margin: 0; font-size: 1.25rem; color: #2dd4bf; font-weight: bold; }
+        .live-badge {
+            background-color: #ef4444;
+            color: white;
+            font-family: monospace;
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+        }
+        main {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 1.5rem;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1.5rem;
+        }
+        @media (min-width: 768px) {
+            main { grid-template-columns: 2fr 1fr; }
+        }
+        section {
+            background-color: #1f2937;
+            padding: 1.5rem;
+            border-radius: 0.75rem;
+            border: 1px solid #374151;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        h2 {
+            border-bottom: 1px solid #374151;
+            padding-bottom: 0.5rem;
+            margin-top: 0;
+            font-size: 1.5rem;
+        }
+        .resume-title { color: #2dd4bf; }
+        .siem-title { color: #f87171; }
+        .subtitle { color: #9ca3af; margin-bottom: 1.5rem; font-weight: 600; }
+        .skill-badge {
+            background-color: #374151;
+            color: #5eead4;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-family: monospace;
+            display: inline-block;
+            margin: 0.25rem;
+        }
+        .counter-box {
+            background-color: #111827;
+            border: 1px solid #374151;
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            text-align: center;
+            margin: 1rem 0;
+        }
+        .counter-label { font-size: 0.75rem; text-transform: uppercase; color: #9ca3af; margin: 0; }
+        .counter-num { font-size: 3rem; font-weight: bold; font-family: monospace; color: #ef4444; margin: 0.5rem 0 0 0; }
+        button {
+            width: 100%;
+            background-color: #0d9488;
+            color: white;
+            font-weight: 600;
+            padding: 0.75rem;
+            border: none;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            font-size: 0.875rem;
+        }
+        button:hover { background-color: #14b8a6; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="nav-container">
+            <h1>Security Monitor Dashboard</h1>
+            <span class="live-badge">● LIVE METRICS</span>
+        </div>
+    </header>
+
+    <main>
+        <!-- Left Side: Professional Resume -->
+        <section>
+            <h2 class="resume-title">Your Name Here</h2>
+            <p class="subtitle">Cloud Security Engineer & Full-Stack Developer</p>
+            
+            <div style="margin-bottom: 1.5rem;">
+                <h3 style="color: #e5e7eb; margin-bottom: 0.5rem;">Summary</h3>
+                <p style="color: #9ca3af; font-size: 0.875rem; line-height: 1.5;">Dedicated cloud enthusiast showcasing real-time security engineering infrastructure utilizing AWS SAM, Lambda, Docker, and full-stack security monitoring metrics.</p>
+            </div>
+            
+            <div>
+                <h3 style="color: #e5e7eb; margin-bottom: 0.5rem;">Technical Skills</h3>
+                <div style="margin-left: -0.25rem;">
+                    <span class="skill-badge">AWS (Lambda, S3)</span>
+                    <span class="skill-badge">Docker Desktop</span>
+                    <span class="skill-badge">Git / GitHub Workflow</span>
+                    <span class="skill-badge">Python Security Scripting</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right Side: Real-Time SIEM Monitor -->
+        <section style="display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+                <h2 class="siem-title">SIEM Security Metrics</h2>
+                <div class="counter-box">
+                    <p class="counter-label">Total Attacks Simulated</p>
+                    <h3 id="attack-counter" class="counter-num">1</h3>
+                </div>
+            </div>
+            <button id="refresh-btn">Query Live Lambda Metrics</button>
+        </section>
+    </main>
+
+    <script>
+        document.getElementById('refresh-btn').addEventListener('click', () => {
+            const counter = document.getElementById('attack-counter');
+            counter.innerText = parseInt(counter.innerText) + 1;
+        });
+    </script>
+</body>
+</html>
+
