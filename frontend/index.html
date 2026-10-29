@@ -144,12 +144,29 @@
         </section>
     </main>
 
-    <script>
-        document.getElementById('refresh-btn').addEventListener('click', () => {
-            const counter = document.getElementById('attack-counter');
-            counter.innerText = parseInt(counter.innerText) + 1;
-        });
+          <script>
+        const API_URL = "https://740868193033-adizgir3.us-east-2.console.aws.amazon.com/apigateway/main/api-detail?region=us-east-2";
+
+        async function fetchSecurityMetrics() {
+            try {
+                const response = await fetch(API_URL);
+                const data = await response.json();
+                
+                // This updates the UI with the real value returned by your AWS Lambda!
+                document.getElementById('attack-counter').innerText = data.total_attacks || 0;
+            } catch (error) {
+                console.error("Error fetching metrics from AWS:", error);
+            }
+        }
+
+        // Fetch metrics automatically as soon as the page loads
+        window.addEventListener('DOMContentLoaded', fetchSecurityMetrics);
+
+        // Fetch metrics again whenever they click the manual refresh button
+        document.getElementById('refresh-btn').addEventListener('click', fetchSecurityMetrics);
     </script>
+
+
 </body>
 </html>
 
