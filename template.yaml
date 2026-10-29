@@ -1,13 +1,61 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Automated S3 Security Remediation Monitor Stack
+Description: Automated S3 Security Remediation Monitor Stack with Built-in CloudTrail Logging
 
 Resources:
+  # 1. Dedicated S3 Bucket to hold CloudTrail audit logs
+  CloudTrailLogBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "siem-audit-logs-${AWS::AccountId}-${AWS::Region}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+
+  # 2. Strict Bucket Policy allowing CloudTrail to write logs securely
+  CloudTrailBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref CloudTrailLogBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AWSCloudTrailAclCheck
+            Effect: Allow
+            Principal:
+              Service: ://amazonaws.com
+            Action: s3:GetBucketAcl
+            Resource: !Sub "arn:aws:s3:::${CloudTrailLogBucket}"
+          - Sid: AWSCloudTrailWrite
+            Effect: Allow
+            Principal:
+              Service: ://amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub "arn:aws:s3:::${CloudTrailLogBucket}/AWSLogs/${AWS::AccountId}/*"
+            Condition:
+              StringEquals:
+                s3:x-amz-acl: bucket-owner-full-control
+
+  # 3. Global CloudTrail Engine to record API events
+  SecurityCloudTrail:
+    Type: AWS::CloudTrail::Trail
+    DependsOn: CloudTrailBucketPolicy
+    Properties:
+      TrailName: project-siem-security-trail
+      S3BucketName: !Ref CloudTrailLogBucket
+      IsLogging: true
+      IsMultiRegionTrail: true
+      IncludeGlobalServiceEvents: true
+
+  # 4. Security Alert Topic
   SecurityAlertTopic:
     Type: AWS::SNS::Topic
     Properties:
       TopicName: cloud-security-alerts
 
+  # 5. Automated Remediation Lambda Function
   SecurityRemediationFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -31,6 +79,7 @@ Resources:
                 - sns:Publish
               Resource: !Ref SecurityAlertTopic
 
+  # 6. Detection Rule Engine (EventBridge)
   S3SecurityEventRule:
     Type: AWS::Events::Rule
     Properties:
@@ -51,6 +100,7 @@ Resources:
         - Arn: !GetAtt SecurityRemediationFunction.Arn
           Id: "TargetLambda"
 
+  # 7. Permission for EventBridge to invoke our security Lambda
   PermissionForEventsToInvokeLambda:
     Type: AWS::Lambda::Permission
     Properties:
