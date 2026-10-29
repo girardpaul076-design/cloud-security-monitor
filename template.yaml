@@ -3,55 +3,34 @@ Transform: AWS::Serverless-2016-10-31
 Description: Automated S3 Security Remediation Monitor Stack
 
 Resources:
-  # 1. Security Alert Topic
   SecurityAlertTopic:
     Type: AWS::SNS::Topic
     Properties:
       TopicName: cloud-security-alerts
 
-  # 2. Automated Remediation Lambda Function
   SecurityRemediationFunction:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: s3-security-remediator
       Handler: lambda_function.lambda_handler
       Runtime: python3.12
-      InlineCode: |
-        import json
-        import boto3
-
-        s3 = boto3.client('s3')
-        sns = boto3.client('sns')
-
-        def lambda_handler(event, context):
-            # Extract target bucket name from the security event trace
-            bucket_name = event['detail']['requestParameters']['bucketName']
-            print(f"ALERT: Public S3 bucket configuration detected on bucket: {bucket_name}")
-
-            # Remediate: Forcefully shut off public access
-            s3.put_public_access_block(
-                Bucket=bucket_name,
-                PublicAccessBlockConfiguration={
-                    'BlockPublicAcls': True,
-                    'IgnorePublicAcls': True,
-                    'BlockPublicPolicy': True,
-                    'RestrictPublicBuckets': True
-                }
-            )
-            print(f"REMEDIATION: Bucket {bucket_name} has been secured and locked down to Private.")
-
-            # Notify: Fire alert to the security team
-            sns.publish(
-                TopicArn="replace_with_sns_arn_later",
-                Message=f"SECURITY ALERT: Public access configuration was detected on bucket '{bucket_name}'. The automated compliance engine has forcefully locked the bucket down to Private successfully.",
-                Subject="CRITICAL: S3 Security Remediation Triggered"
-            )
-            return {'statusCode': 200, 'body': json.dumps('Security Remediation Complete')}
+      CodeUri: src/
+      Environment:
+        Variables:
+          SNS_TOPIC_ARN: !Ref SecurityAlertTopic
       Policies:
-        - AmazonS3FullAccess
-        - AmazonSNSFullAccess
+        - Statement:
+            - Sid: S3RemediationPolicy
+              Effect: Allow
+              Action:
+                - s3:PutPublicAccessBlock
+              Resource: "*"
+            - Sid: SNSPublishPolicy
+              Effect: Allow
+              Action:
+                - sns:Publish
+              Resource: !Ref SecurityAlertTopic
 
-  # 3. Detection Rule Engine (EventBridge)
   S3SecurityEventRule:
     Type: AWS::Events::Rule
     Properties:
@@ -72,7 +51,6 @@ Resources:
         - Arn: !GetAtt SecurityRemediationFunction.Arn
           Id: "TargetLambda"
 
-  # 4. Permission for EventBridge to invoke our security Lambda
   PermissionForEventsToInvokeLambda:
     Type: AWS::Lambda::Permission
     Properties:
