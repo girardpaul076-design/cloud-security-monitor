@@ -23,7 +23,7 @@
             z-index: 50;
         }
         .nav-container {
-            max-w: 1200px;
+            max-width: 1200px;
             margin: 0 auto;
             display: flex;
             justify-content: space-between;
@@ -112,8 +112,8 @@
     <main>
         <!-- Left Side: Professional Resume -->
         <section>
-            <h2 class="resume-title">Your Name Here</h2>
-            <p class="subtitle">Cloud Security Engineer & Full-Stack Developer</p>
+            <h2 class="resume-title">Paul Girard</h2>
+            <p class="subtitle">Cloud Security Engineer & DevOps Developer</p>
             
             <div style="margin-bottom: 1.5rem;">
                 <h3 style="color: #e5e7eb; margin-bottom: 0.5rem;">Summary</h3>
@@ -123,10 +123,11 @@
             <div>
                 <h3 style="color: #e5e7eb; margin-bottom: 0.5rem;">Technical Skills</h3>
                 <div style="margin-left: -0.25rem;">
-                    <span class="skill-badge">AWS (Lambda, S3)</span>
+                    <span class="skill-badge">AWS (Lambda, S3, API Gateway)</span>
                     <span class="skill-badge">Docker Desktop</span>
                     <span class="skill-badge">Git / GitHub Workflow</span>
                     <span class="skill-badge">Python Security Scripting</span>
+                    <span class="skill-badge">Infrastructure as Code (SAM)</span>
                 </div>
             </div>
         </section>
@@ -136,26 +137,32 @@
             <div>
                 <h2 class="siem-title">SIEM Security Metrics</h2>
                 <div class="counter-box">
-                    <p class="counter-label">Total Attacks Simulated</p>
-                    <h3 id="attack-counter" class="counter-num">1</h3>
+                    <p class="counter-label">Total Site Visitors</p>
+                    <h3 id="visitor-counter" class="counter-num">0</h3>
                 </div>
             </div>
             <button id="refresh-btn">Query Live Lambda Metrics</button>
         </section>
     </main>
-
-          <script>
-        const API_URL = "https://740868193033-adizgir3.us-east-2.console.aws.amazon.com/apigateway/main/api-detail?region=us-east-2";
+    <script>
+        // CRITICAL FIX: Paste your live API execution URL from your 'sam deploy' Outputs here!
+        const API_URL = "YOUR_AWS_API_GATEWAY_INVOKE_URL_HERE/resume-visitor-counter";
 
         async function fetchSecurityMetrics() {
+            const counterDisplay = document.getElementById('visitor-counter');
             try {
                 const response = await fetch(API_URL);
+                if (!response.ok) {
+                    throw new Error(`HTTP network error: ${response.status}`);
+                }
                 const data = await response.json();
                 
-                // This updates the UI with the real value returned by your AWS Lambda!
-                document.getElementById('attack-counter').innerText = data.total_attacks || 0;
+                // Updates UI with the live visitor counter integer mapped from DynamoDB
+                counterDisplay.innerText = data.count !== undefined ? data.count : 0;
             } catch (error) {
-                console.error("Error fetching metrics from AWS:", error);
+                console.error("Error fetching metrics from AWS API Gateway:", error);
+                counterDisplay.innerText = "ERR";
+                counterDisplay.style.color = "#fbbf24"; // Turn indicator yellow on failure
             }
         }
 
@@ -166,7 +173,5 @@
         document.getElementById('refresh-btn').addEventListener('click', fetchSecurityMetrics);
     </script>
 
-
 </body>
 </html>
-
