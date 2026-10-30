@@ -53,7 +53,7 @@ ResumeCounterFunction:
     visitor_table = dynamodb.Table('cloud-resume-stats')
     metrics_table = dynamodb.Table('SiemMetricsTable')
           
-   lambda_handler(event, context):
+    lambda_handler(event, context):
             # Inspect the incoming request path to determine action
             path = event.get('rawPath', '') or event.get('requestContext', {}).get('http', {}).get('path', '')
             
@@ -126,7 +126,7 @@ ResumeCounterFunction:
       Runtime: python3.12
       Environment:
         Variables:
-          METRICS_TABLE: !Ref SiemMetricsTable
+          METRICS_TABLE: Ref SiemMetricsTable
       InlineCode: |
         import boto3
         import gzip
