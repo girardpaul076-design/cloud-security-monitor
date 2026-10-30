@@ -47,13 +47,13 @@ ResumeCounterFunction:
         import boto3
         import os
         
-          dynamodb = boto3.resource('dynamodb')
+    dynamodb = boto3.resource('dynamodb')
           
-          # Connect to both tables in your architecture
-          visitor_table = dynamodb.Table('cloud-resume-stats')
-          metrics_table = dynamodb.Table('SiemMetricsTable')
+       # Connect to both tables in your architecture
+    visitor_table = dynamodb.Table('cloud-resume-stats')
+    metrics_table = dynamodb.Table('SiemMetricsTable')
           
-          def lambda_handler(event, context):
+   lambda_handler(event, context):
             # Inspect the incoming request path to determine action
             path = event.get('rawPath', '') or event.get('requestContext', {}).get('http', {}).get('path', '')
             
@@ -64,12 +64,12 @@ ResumeCounterFunction:
             }
             
             # --- ROUTE 1: Visitor Counter ---
-            if 'visitor' in path:
-                response = visitor_table.update_item(
-                    Key={'id': 'visitors'},
-                    UpdateExpression='ADD #c :val',
-                    ExpressionAttributeNames={'#c': 'count'},
-                    ExpressionAttributeValues={':val': 1},
+    if 'visitor' in path:
+            response = visitor_table.update_item(
+            Key={'id': 'visitors'},
+            UpdateExpression='ADD #c :val',
+    ExpressionAttributeNames={'#c': 'count'},
+    ExpressionAttributeValues={':val': 1},
                     ReturnValues='UPDATED_NEW'
                 )
                 views = int(response['Attributes']['count'])
@@ -80,7 +80,7 @@ ResumeCounterFunction:
                 }
                 
             # --- ROUTE 2: SIEM Attack Metrics Tracker ---
-            elif 'metrics' in path:
+    elif 'metrics' in path:
                 # Scan the table to count how many logs match 'WebEdgeAttack' or 'PublicS3Remediation'
                 # For high scale, you can optimize this, but for a resume portfolio, this works perfectly.
                 response = metrics_table.scan(Select='COUNT')
@@ -93,7 +93,7 @@ ResumeCounterFunction:
                 }
                 
             # Default fallback routing
-            return {
+    return {
                 'statusCode': 404,
                 'headers': headers,
                 'body': json.dumps({'message': 'Endpoint not found'})
