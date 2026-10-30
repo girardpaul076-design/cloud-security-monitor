@@ -36,32 +36,30 @@ Resources:
         Name: id
         Type: String
 
-ResumeCounterFunction:
+  ResumeCounterFunction:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: resume-visitor-counter-iac
-      Handler: index.lambda_handler
+      Handler: lambda_function.lambda_handler
       Runtime: python3.12
-      InlineCode: |
-        import json
-        import boto3
-        import os
-        
-    dynamodb = boto3.resource('dynamodb')
-          
-       # Connect to both tables in your architecture
-    visitor_table = dynamodb.Table('cloud-resume-stats')
-    metrics_table = dynamodb.Table('SiemMetricsTable')
-          
-    lambda_handler(event, context):
-            # Inspect the incoming request path to determine action
-            path = event.get('rawPath', '') or event.get('requestContext', {}).get('http', {}).get('path', '')
-            
-            headers = {
-                'Access-Control-Allow-Headers': 'Content-Type',
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'OPTIONS,GET'
-            }
+      CodeUri: src/
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: cloud-resume-stats
+        - DynamoDBCrudPolicy:
+            TableName: SiemMetricsTable
+      Events:
+        CounterApi:
+          Type: HttpApi
+          Properties:
+            Path: /resume-visitor-counter
+            Method: get
+        MetricsApi:
+          Type: HttpApi
+          Properties:
+            Path: /metrics
+            Method: get
+
             
             # --- ROUTE 1: Visitor Counter ---
     if 'visitor' in path:
