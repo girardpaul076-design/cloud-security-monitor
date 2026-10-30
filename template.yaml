@@ -37,6 +37,80 @@ Resources:
             Condition:
               StringEquals:
                 s3:x-amz-acl: bucket-owner-full-control
+  # ==========================================
+  # 3. COMPLIANCE ENGINE SUBSYSTEM (GUARDRAILS)
+  # ==========================================
+  
+  # The Remediation Function
+  S3RemediationLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: s3-public-bucket-remediator
+      Handler: index.lambda_handler
+      Runtime: python3.12
+      InlineCode: |
+        import boto3
+        import json
+
+        s3 = boto3.client('s3')
+
+        def lambda_handler(event, context):
+            # Parse bucket name from the incoming EventBridge/CloudTrail schema
+            try:
+                bucket_name = event['detail']['requestParameters']['bucketName']
+                print(f"🚨 Compliance violation detected! Bucket exposed: {bucket_name}")
+                
+                # Remediation Action: Enforce 100% Private Block Public Access
+                s3.put_public_access_block(
+                    Bucket=bucket_name,
+                    PublicAccessBlockConfiguration={
+                        'BlockPublicAcls': True,
+                        'IgnorePublicAcls': True,
+                        'BlockPublicPolicy': True,
+                        'RestrictPublicBuckets': True
+                    }
+                )
+                print(f"✅ Successfully remediated {bucket_name}. Public access blocked.")
+                
+            except Exception as e:
+                print(f"Error executing remediation loop: {str(e)}")
+      Policies:
+        # Give Lambda permissions to change S3 public access settings back to private
+        - Statement:
+            - Effect: Allow
+              Action:
+                - "s3:PutBucketPublicAccessBlock"
+                - "s3:GetBucketPublicAccessBlock"
+              Resource: "arn:aws:s3:::*"
+              
+  # The Detection Layer: EventBridge Rule matching CloudTrail API Calls
+  S3PublicEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: "Detects PutBucketAcl, PutBucketPolicy, and PutBucketPublicAccessBlock events"
+      State: ENABLED
+      EventPattern:
+        source:
+          - "aws.s3"
+        detail-type:
+          - "AWS API Call via CloudTrail"
+        detail:
+          eventName:
+            - "PutBucketAcl"
+            - "PutBucketPolicy"
+            - "PutBucketPublicAccessBlock"
+      Targets:
+        - Arn: !GetAtt S3RemediationLambda.Arn
+          Id: "S3RemediationTarget"
+
+  # Permission for EventBridge to wake up our Remediation Lambda
+  PermissionForEventsToInvokeLambda:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref S3RemediationLambda
+      Action: "lambda:InvokeFunction"
+      Principal: "://amazonaws.com"
+      SourceArn: !GetAtt S3PublicEventRule.Arn
 
   # 3. Global CloudTrail Engine to record API events
   SecurityCloudTrail:
