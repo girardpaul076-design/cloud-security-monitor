@@ -36,7 +36,7 @@ Resources:
         Name: id
         Type: String
 
-  ResumeCounterFunction:
+    ResumeCounterFunction:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: resume-visitor-counter-iac
