@@ -36,7 +36,7 @@ Resources:
         Name: id
         Type: String
 
-   ResumeCounterFunction:
+ResumeCounterFunction:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: resume-visitor-counter-iac
@@ -47,13 +47,13 @@ Resources:
         import boto3
         import os
         
-        dynamodb = boto3.resource('dynamodb')
-        
-        # Connect to both tables in your architecture
-        visitor_table = dynamodb.Table('cloud-resume-stats')
-        metrics_table = dynamodb.Table('SiemMetricsTable')
-        
-        def lambda_handler(event, context):
+          dynamodb = boto3.resource('dynamodb')
+          
+          # Connect to both tables in your architecture
+          visitor_table = dynamodb.Table('cloud-resume-stats')
+          metrics_table = dynamodb.Table('SiemMetricsTable')
+          
+          def lambda_handler(event, context):
             # Inspect the incoming request path to determine action
             path = event.get('rawPath', '') or event.get('requestContext', {}).get('http', {}).get('path', '')
             
