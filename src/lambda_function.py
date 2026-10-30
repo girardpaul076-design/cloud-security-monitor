@@ -2,28 +2,51 @@ import json
 import boto3
 import os
 
-s3 = boto3.client('s3')
-sns = boto3.client('sns')
+dynamodb = boto3.resource('dynamodb')
+
+# Connect to both tables in your architecture
+visitor_table = dynamodb.Table('cloud-resume-stats')
+metrics_table = dynamodb.Table('SiemMetricsTable')
 
 def lambda_handler(event, context):
-    bucket_name = event['detail']['requestParameters']['bucketName']
-    print(f"ALERT: Public S3 bucket configuration detected on bucket: {bucket_name}")
-
-    s3.put_public_access_block(
-        Bucket=bucket_name,
-        PublicAccessBlockConfiguration={
-            'BlockPublicAcls': True,
-            'IgnorePublicAcls': True,
-            'BlockPublicPolicy': True,
-            'RestrictPublicBuckets': True
+    # Inspect the incoming request path to determine action
+    path = event.get('rawPath', '') or event.get('requestContext', {}).get('http', {}).get('path', '')
+    
+    headers = {
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'OPTIONS,GET'
+    }
+    
+    # --- ROUTE 1: Visitor Counter ---
+    if 'visitor' in path:
+        response = visitor_table.update_item(
+            Key={'id': 'visitors'},
+            UpdateExpression='ADD #c :val',
+            ExpressionAttributeNames={'#c': 'count'},
+            ExpressionAttributeValues={':val': 1},
+            ReturnValues='UPDATED_NEW'
+        )
+        views = int(response['Attributes']['count'])
+        return {
+            'statusCode': 200,
+            'headers': headers,
+            'body': json.dumps({'count': views})
         }
-    )
-    print(f"REMEDIATION: Bucket {bucket_name} has been secured and locked down to Private.")
-
-    sns_arn = os.environ['SNS_TOPIC_ARN']
-    sns.publish(
-        TopicArn=sns_arn,
-        Message=f"SECURITY ALERT: Public access configuration was detected on bucket '{bucket_name}'. The automated compliance engine has forcefully locked the bucket down to Private successfully.",
-        Subject="CRITICAL: S3 Security Remediation Triggered"
-    )
-    return {'statusCode': 200, 'body': json.dumps('Security Remediation Complete')}
+        
+    # --- ROUTE 2: SIEM Attack Metrics Tracker ---
+    elif 'metrics' in path:
+        response = metrics_table.scan(Select='COUNT')
+        attack_count = response.get('Count', 0)
+        
+        return {
+            'statusCode': 200,
+            'headers': headers,
+            'body': json.dumps({'total_attacks': attack_count})
+        }
+        
+    return {
+        'statusCode': 404,
+        'headers': headers,
+        'body': json.dumps({'message': 'Endpoint not found'})
+    }
