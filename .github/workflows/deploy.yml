@@ -12,17 +12,25 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v4
 
+    - name: Setup AWS SAM CLI Tooling
+      uses: aws-actions/setup-sam@v2
+      with:
+        use-installer: true
+
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: us-east-2
+    - name: Build Serverless Application Assets
+      run: sam build --template template.yaml
 
-    - name: Deploy Security IaC Stack
-      uses: aws-actions/aws-cloudformation-github-deploy@v1
-      with:
-        name: cloud-security-monitor-stack
-        template: template.yaml
-        no-fail-on-empty-changeset: "1"
-        capabilities: CAPABILITY_IAM,CAPABILITY_AUTO_EXPAND
+    - name: Package and Deploy Security IaC Stack
+      run: |
+        sam deploy --no-confirm-changeset \
+          --no-fail-on-empty-changeset \
+          --stack-name cloud-security-monitor-stack \
+          --s3-bucket siem-test-bucket-paul \
+          --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND \
+          --region us-east-2
