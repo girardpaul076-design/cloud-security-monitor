@@ -1,3 +1,4 @@
+```yaml
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: Paul Girard Cloud Resume Challenge & Serverless SIEM Security Engine Portfolio
@@ -36,38 +37,39 @@ Resources:
         Name: id
         Type: String
 
-    ResumeCounterFunction:
+  ResumeCounterFunction:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: resume-visitor-counter-iac
-      Handler: lambda_function.lambda_handler
+      Handler: index.lambda_handler
       Runtime: python3.12
-      CodeUri: src/
-      Policies:
-        - DynamoDBCrudPolicy:
-            TableName: cloud-resume-stats
-        - DynamoDBCrudPolicy:
-            TableName: SiemMetricsTable
-      Events:
-        CounterApi:
-          Type: HttpApi
-          Properties:
-            Path: /resume-visitor-counter
-            Method: get
-        MetricsApi:
-          Type: HttpApi
-          Properties:
-            Path: /metrics
-            Method: get
+      Environment:
+        Variables:
+          VISITOR_TABLE: !Ref ResumeTable
+          METRICS_TABLE: !Ref SiemMetricsTable
+      InlineCode: |
+        import boto3
+        import json
+        import os
 
+        dynamodb = boto3.resource('dynamodb')
+        visitor_table = dynamodb.Table(os.environ['VISITOR_TABLE'])
+        metrics_table = dynamodb.Table(os.environ['METRICS_TABLE'])
+
+        def lambda_handler(event, context):
+            path = event.get('rawPath', '')
+            headers = {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            }
             
             # --- ROUTE 1: Visitor Counter ---
-    if 'visitor' in path:
-            response = visitor_table.update_item(
-            Key={'id': 'visitors'},
-            UpdateExpression='ADD #c :val',
-    ExpressionAttributeNames={'#c': 'count'},
-    ExpressionAttributeValues={':val': 1},
+            if 'visitor' in path:
+                response = visitor_table.update_item(
+                    Key={'id': 'visitors'},
+                    UpdateExpression='ADD #c :val',
+                    ExpressionAttributeNames={'#c': 'count'},
+                    ExpressionAttributeValues={':val': 1},
                     ReturnValues='UPDATED_NEW'
                 )
                 views = int(response['Attributes']['count'])
@@ -78,9 +80,7 @@ Resources:
                 }
                 
             # --- ROUTE 2: SIEM Attack Metrics Tracker ---
-    elif 'metrics' in path:
-                # Scan the table to count how many logs match 'WebEdgeAttack' or 'PublicS3Remediation'
-                # For high scale, you can optimize this, but for a resume portfolio, this works perfectly.
+            elif 'metrics' in path:
                 response = metrics_table.scan(Select='COUNT')
                 attack_count = response.get('Count', 0)
                 
@@ -91,16 +91,16 @@ Resources:
                 }
                 
             # Default fallback routing
-    return {
+            return {
                 'statusCode': 404,
                 'headers': headers,
                 'body': json.dumps({'message': 'Endpoint not found'})
             }
       Policies:
         - DynamoDBCrudPolicy:
-            TableName: cloud-resume-stats
+            TableName: !Ref ResumeTable
         - DynamoDBCrudPolicy:
-            TableName: SiemMetricsTable
+            TableName: !Ref SiemMetricsTable
       Events:
         CounterApi:
           Type: HttpApi
@@ -124,7 +124,7 @@ Resources:
       Runtime: python3.12
       Environment:
         Variables:
-          METRICS_TABLE: Ref SiemMetricsTable
+          METRICS_TABLE: !Ref SiemMetricsTable
       InlineCode: |
         import boto3
         import gzip
@@ -139,8 +139,8 @@ Resources:
         
         def lambda_handler(event, context):
             s3_client = boto3.client('s3')
-            bucket = event['Records']['s3']['bucket']['name']
-            key = urllib.parse.unquote_plus(event['Records']['s3']['object']['key'], encoding='utf-8')
+            bucket = event['Records'][0]['s3']['bucket']['name']
+            key = urllib.parse.unquote_plus(event['Records'][0]['s3']['object']['key'], encoding='utf-8')
             
             response = s3_client.get_object(Bucket=bucket, Key=key)
             with gzip.GzipFile(fileobj=io.BytesIO(response['Body'].read())) as tf:
@@ -161,7 +161,6 @@ Resources:
                 if any(bad_path in uri_path.lower() for bad_path in suspicious_paths):
                     print(f"⚠️ SIEM DETECTED ATTACK: IP {client_ip} scanned path: {uri_path}")
                     
-                    # LOG TO DATABASE: Record attacker fingerprint for resume dashboard ingestion
                     metrics_table.put_item(
                         Item={
                             'metric_id': str(uuid.uuid4()),
@@ -175,7 +174,7 @@ Resources:
         - S3ReadPolicy:
             BucketName: girardpaul076-siem-logs
         - DynamoDBCrudPolicy:
-            TableName: SiemMetricsTable
+            TableName: !Ref SiemMetricsTable
       Events:
         LogUploadEvent:
           Type: S3
@@ -183,9 +182,10 @@ Resources:
             Bucket: !Ref CloudFrontLogBucket
             Events: s3:ObjectCreated:*
             Filter:
-              Filters:
-                - Name: suffix
-                  Value: .gz
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: .gz
 
   # =========================================================================
   # AUTOMATED COMPLIANCE REMEDIATION GUARDRAIL
@@ -303,7 +303,7 @@ Resources:
     Properties:
       FunctionName: !Ref SecurityRemediationFunction
       Action: lambda:InvokeFunction
-      Principal: ://amazonaws.com
+      Principal: events.amazonaws.com
       SourceArn: !GetAtt S3SecurityEventRule.Arn
 
 # =========================================================================
@@ -312,4 +312,6 @@ Resources:
 Outputs:
   FetchCounterApi:
     Description: "API Gateway Endpoint URL to paste into your index.html script"
-    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}://"
+    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com/"
+
+```
