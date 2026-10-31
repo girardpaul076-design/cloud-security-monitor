@@ -1,3 +1,10 @@
+This script is syntactically correct and uses an **atomic counter pattern** (`ADD attack_count :val`), which is much faster and more cost-effective than scanning the whole table!
+
+Just like the previous snippet, it contains non-breaking spaces in the indentation that will cause a Python `IndentationError` if copy-pasted directly.
+
+Here is the cleaned-up version with standard spacing ready to use:
+
+```python
 import json
 import boto3
 import os
@@ -40,3 +47,5 @@ def lambda_handler(event, context):
             "total_attacks": int(attack_count)
         })
     }
+
+```
