@@ -79,12 +79,13 @@
             background-color: #111827;
             border: 1px solid #374151;
             border-radius: 0.5rem;
-            padding: 1.5rem;
+            padding: 1rem;
             text-align: center;
             margin: 1rem 0;
         }
         .counter-label { font-size: 0.75rem; text-transform: uppercase; color: #9ca3af; margin: 0; }
-        .counter-num { font-size: 3rem; font-weight: bold; font-family: monospace; color: #ef4444; margin: 0.5rem 0 0 0; }
+        .counter-num { font-size: 2.5rem; font-weight: bold; font-family: monospace; color: #ef4444; margin: 0.5rem 0 0 0; }
+        .counter-num.blue { color: #2dd4bf; }
         button {
             width: 100%;
             background-color: #0d9488;
@@ -136,40 +137,59 @@
         <section style="display: flex; flex-direction: column; justify-content: space-between;">
             <div>
                 <h2 class="siem-title">SIEM Security Metrics</h2>
+                
                 <div class="counter-box">
                     <p class="counter-label">Total Site Visitors</p>
-                    <h3 id="visitor-counter" class="counter-num">0</h3>
+                    <h3 id="visitor-counter" class="counter-num blue">0</h3>
+                </div>
+
+                <div class="counter-box">
+                    <p class="counter-label">Simulated Attacks Caught</p>
+                    <h3 id="attack-counter" class="counter-num">0</h3>
                 </div>
             </div>
             <button id="refresh-btn">Query Live Lambda Metrics</button>
         </section>
     </main>
+
     <script>
-        // CRITICAL FIX: Paste your live API execution URL from your 'sam deploy' Outputs here!
-        const API_URL = "YOUR_AWS_API_GATEWAY_INVOKE_URL_HERE/resume-visitor-counter";
+        // Replace with your base API Gateway Invoke URL from 'sam deploy' Outputs (do not include trailing slash)
+        const API_BASE_URL = "YOUR_AWS_API_GATEWAY_INVOKE_URL_HERE";
 
         async function fetchSecurityMetrics() {
-            const counterDisplay = document.getElementById('visitor-counter');
+            const visitorDisplay = document.getElementById('visitor-counter');
+            const attackDisplay = document.getElementById('attack-counter');
+            
             try {
-                const response = await fetch(API_URL);
-                if (!response.ok) {
-                    throw new Error(`HTTP network error: ${response.status}`);
+                // Fetch visitor counter
+                const visitorResponse = await fetch(`${API_BASE_URL}/resume-visitor-counter`);
+                if (visitorResponse.ok) {
+                    const visitorData = await visitorResponse.json();
+                    visitorDisplay.innerText = visitorData.count !== undefined ? visitorData.count : 0;
+                } else {
+                    visitorDisplay.innerText = "ERR";
                 }
-                const data = await response.json();
-                
-                // Updates UI with the live visitor counter integer mapped from DynamoDB
-                counterDisplay.innerText = data.count !== undefined ? data.count : 0;
+
+                // Fetch attack metrics
+                const attackResponse = await fetch(`${API_BASE_URL}/metrics`);
+                if (attackResponse.ok) {
+                    const attackData = await attackResponse.json();
+                    attackDisplay.innerText = attackData.total_attacks !== undefined ? attackData.total_attacks : 0;
+                } else {
+                    attackDisplay.innerText = "ERR";
+                }
+
             } catch (error) {
                 console.error("Error fetching metrics from AWS API Gateway:", error);
-                counterDisplay.innerText = "ERR";
-                counterDisplay.style.color = "#fbbf24"; // Turn indicator yellow on failure
+                visitorDisplay.innerText = "ERR";
+                attackDisplay.innerText = "ERR";
             }
         }
 
-        // Fetch metrics automatically as soon as the page loads
+        // Fetch metrics automatically on page load
         window.addEventListener('DOMContentLoaded', fetchSecurityMetrics);
 
-        // Fetch metrics again whenever they click the manual refresh button
+        // Fetch metrics on manual refresh button click
         document.getElementById('refresh-btn').addEventListener('click', fetchSecurityMetrics);
     </script>
 
