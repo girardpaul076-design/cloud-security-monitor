@@ -1,34 +1,16 @@
-```yaml
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Paul Girard Cloud Resume Challenge & Serverless SIEM Security Engine Portfolio
+Description: Unified Cloud Resume and SIEM Compliance Security Monitor Backend
+
+Globals:
+  HttpApi:
+    CorsConfiguration:
+      AllowMethods: [GET, OPTIONS]
+      AllowHeaders: [Content-Type]
+      AllowOrigins: ['*']
 
 Resources:
-  # =========================================================================
-  # GLOBAL STORAGE & LOGGING ARCHITECTURE
-  # =========================================================================
-  CloudFrontLogBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: girardpaul076-siem-logs
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
-
-  SecurityCloudTrail:
-    Type: AWS::CloudTrail::Trail
-    Properties:
-      TrailName: project-siem-security-trail
-      S3BucketName: !Ref CloudFrontLogBucket
-      IsLogging: true
-      IsMultiRegionTrail: true
-      IncludeGlobalServiceEvents: true
-
-  # =========================================================================
-  # CORE RESUME WEBSITE VISITOR COUNTER SUBSYSTEM
-  # =========================================================================
+  # 1. High-Performance SIEM Datastore
   ResumeTable:
     Type: AWS::Serverless::SimpleTable
     Properties:
@@ -37,281 +19,119 @@ Resources:
         Name: id
         Type: String
 
+  # 2. Test S3 Bucket Used for Intrusion Simulations
+  SimulationVictimBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "siem-simulation-victim-${AWS::AccountId}-${AWS::Region}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        IgnorePublicAcls: false
+        BlockPublicPolicy: false
+        RestrictPublicBuckets: false
+
+  # 3. Dual-Purpose Logic Handler (Visitor Tracking & Threat Remediation)
   ResumeCounterFunction:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: resume-visitor-counter-iac
       Handler: index.lambda_handler
       Runtime: python3.12
-      Environment:
-        Variables:
-          VISITOR_TABLE: !Ref ResumeTable
-          METRICS_TABLE: !Ref SiemMetricsTable
       InlineCode: |
-        import boto3
         import json
-        import os
+        import boto3
+        import time
+        from datetime import datetime
 
+        s3 = boto3.client('s3')
         dynamodb = boto3.resource('dynamodb')
-        visitor_table = dynamodb.Table(os.environ['VISITOR_TABLE'])
-        metrics_table = dynamodb.Table(os.environ['METRICS_TABLE'])
+        table = dynamodb.Table('cloud-resume-stats')
 
         def lambda_handler(event, context):
-            path = event.get('rawPath', '')
-            headers = {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            }
-            
-            # --- ROUTE 1: Visitor Counter ---
-            if 'visitor' in path:
-                response = visitor_table.update_item(
+            # Check if execution invocation initiated from an EventBridge Guard Duty/CloudTrail Rule
+            if "detail" in event:
+                detail = event["detail"]
+                bucket_name = detail.get("requestParameters", {}).get("bucketName")
+                
+                if bucket_name:
+                    # 1. Automate remediation back to 100% private
+                    try:
+                        s3.put_bucket_acl(Bucket=bucket_name, ACL='private')
+                        status_msg = "REMEDIATED"
+                    except Exception as e:
+                        status_msg = f"ERROR: {str(e)}"
+                    
+                    # 2. Append incident log record to the dashboard datastore
+                    incident_id = f"ALERT-{int(time.time())}"
+                    table.put_item(
+                        Item={
+                            'id': incident_id,
+                            'timestamp': datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'),
+                            'bucket_name': bucket_name,
+                            'event_type': 'PutBucketAcl (Public Exposure Event)',
+                            'status': status_msg
+                        }
+                    )
+                    return {"status": "complete", "incident_id": incident_id}
+
+            # Handle standard web dashboard fetch routes
+            path = event.get('requestContext', {}).get('http', {}).get('path', '')
+            if 'resume-visitor-counter' in path:
+                response = table.update_item(
                     Key={'id': 'visitors'},
                     UpdateExpression='ADD #c :val',
                     ExpressionAttributeNames={'#c': 'count'},
                     ExpressionAttributeValues={':val': 1},
                     ReturnValues='UPDATED_NEW'
                 )
-                views = int(response['Attributes']['count'])
                 return {
                     'statusCode': 200,
-                    'headers': headers,
-                    'body': json.dumps({'count': views})
+                    'headers': {'Content-Type': 'application/json'},
+                    'body': json.dumps({'count': int(response['Attributes']['count'])})
                 }
-                
-            # --- ROUTE 2: SIEM Attack Metrics Tracker ---
-            elif 'metrics' in path:
-                response = metrics_table.scan(Select='COUNT')
-                attack_count = response.get('Count', 0)
-                
+            elif 'security-alerts' in path:
+                response = table.scan()
+                items = [i for i in response.get('Items', []) if i.get('id') != 'visitors']
                 return {
                     'statusCode': 200,
-                    'headers': headers,
-                    'body': json.dumps({'total_attacks': attack_count})
+                    'headers': {'Content-Type': 'application/json'},
+                    'body': json.dumps({'alerts': items})
                 }
-                
-            # Default fallback routing
-            return {
-                'statusCode': 404,
-                'headers': headers,
-                'body': json.dumps({'message': 'Endpoint not found'})
-            }
+            return {'statusCode': 404, 'body': 'Not Found'}
       Policies:
         - DynamoDBCrudPolicy:
-            TableName: !Ref ResumeTable
-        - DynamoDBCrudPolicy:
-            TableName: !Ref SiemMetricsTable
+            TableName: cloud-resume-stats
+        - S3CrudPolicy:
+            BucketName: !Sub "siem-simulation-victim-${AWS::AccountId}-${AWS::Region}"
       Events:
-        CounterApi:
+        CounterApiEvent:
           Type: HttpApi
           Properties:
             Path: /resume-visitor-counter
             Method: get
-        MetricsApi:
+        SecurityAlertsEvent:
           Type: HttpApi
           Properties:
-            Path: /metrics
+            Path: /security-alerts
             Method: get
-
-  # =========================================================================
-  # EDGE SIEM WEB ATTACK PARSER SUBSYSTEM
-  # =========================================================================
-  SiemEngineFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: resume-siem-attack-parser
-      Handler: index.lambda_handler
-      Runtime: python3.12
-      Environment:
-        Variables:
-          METRICS_TABLE: !Ref SiemMetricsTable
-      InlineCode: |
-        import boto3
-        import gzip
-        import io
-        import urllib.parse
-        import os
-        import uuid
-        import time
-        
-        dynamodb = boto3.resource('dynamodb')
-        metrics_table = dynamodb.Table(os.environ['METRICS_TABLE'])
-        
-        def lambda_handler(event, context):
-            s3_client = boto3.client('s3')
-            bucket = event['Records'][0]['s3']['bucket']['name']
-            key = urllib.parse.unquote_plus(event['Records'][0]['s3']['object']['key'], encoding='utf-8')
-            
-            response = s3_client.get_object(Bucket=bucket, Key=key)
-            with gzip.GzipFile(fileobj=io.BytesIO(response['Body'].read())) as tf:
-                log_lines = tf.read().decode('utf-8').splitlines()
-                
-            suspicious_paths = [".env", "wp-admin", ".git", "config.php"]
-            
-            for line in log_lines:
-                if line.startswith('#'): 
-                    continue
-                fields = line.split('\t')
-                if len(fields) < 15:
-                    continue
-                    
-                client_ip = fields[4]
-                uri_path = fields[7]
-                
-                if any(bad_path in uri_path.lower() for bad_path in suspicious_paths):
-                    print(f"⚠️ SIEM DETECTED ATTACK: IP {client_ip} scanned path: {uri_path}")
-                    
-                    metrics_table.put_item(
-                        Item={
-                            'metric_id': str(uuid.uuid4()),
-                            'Timestamp': int(time.time()),
-                            'Type': 'WebEdgeAttack',
-                            'AttackerIP': client_ip,
-                            'TargetUri': uri_path
-                        }
-                    )
-      Policies:
-        - S3ReadPolicy:
-            BucketName: girardpaul076-siem-logs
-        - DynamoDBCrudPolicy:
-            TableName: !Ref SiemMetricsTable
-      Events:
-        LogUploadEvent:
-          Type: S3
+        # Automated Rule Trigger: Intercepts S3 configuration vulnerability exploits
+        S3PublicBreachRule:
+          Type: CloudWatchEvent
           Properties:
-            Bucket: !Ref CloudFrontLogBucket
-            Events: s3:ObjectCreated:*
-            Filter:
-              S3Key:
-                Rules:
-                  - Name: suffix
-                    Value: .gz
+            Pattern:
+              source: ["aws.s3"]
+              detail-type: ["AWS API Call via CloudTrail"]
+              detail:
+                eventSource: ["://amazonaws.com"]
+                eventName: ["PutBucketAcl", "PutBucketPolicy"]
 
-  # =========================================================================
-  # AUTOMATED COMPLIANCE REMEDIATION GUARDRAIL
-  # =========================================================================
-  SiemMetricsTable:
-    Type: AWS::Serverless::SimpleTable
-    Properties:
-      TableName: SiemMetricsTable
-      PrimaryKey:
-        Name: metric_id
-        Type: String
-
-  SecurityAlertTopic:
-    Type: AWS::SNS::Topic
-    Properties:
-      TopicName: cloud-security-alerts
-
-  SecurityRemediationFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: s3-security-remediator
-      Handler: index.lambda_handler
-      Runtime: python3.12
-      Environment:
-        Variables:
-          SNS_TOPIC_ARN: !Ref SecurityAlertTopic
-          METRICS_TABLE: !Ref SiemMetricsTable
-      InlineCode: |
-        import boto3
-        import json
-        import os
-        import uuid
-        import time
-
-        s3 = boto3.client('s3')
-        sns = boto3.client('sns')
-        dynamodb = boto3.resource('dynamodb')
-        metrics_table = dynamodb.Table(os.environ['METRICS_TABLE'])
-
-        def lambda_handler(event, context):
-            try:
-                bucket_name = event['detail']['requestParameters']['bucketName']
-                user_identity = event['detail']['userIdentity']['arn']
-                print(f"🚨 Compliance violation detected! Bucket exposed: {bucket_name} by {user_identity}")
-                
-                s3.put_public_access_block(
-                    Bucket=bucket_name,
-                    PublicAccessBlockConfiguration={
-                        'BlockPublicAcls': True,
-                        'IgnorePublicAcls': True,
-                        'BlockPublicPolicy': True,
-                        'RestrictPublicBuckets': True
-                    }
-                )
-                
-                alert_message = f"🚨 SECURITY REMEDIATION NOTICE\n\nBucket: {bucket_name}\nAction: Exposed Publicly\nStatus: Fixed (Reset to 100% Private)\nActor: {user_identity}"
-                sns.publish(
-                    TopicArn=os.environ['SNS_TOPIC_ARN'],
-                    Subject="Cloud Security Guardrail Alert",
-                    Message=alert_message
-                )
-
-                metrics_table.put_item(
-                    Item={
-                        'metric_id': str(uuid.uuid4()),
-                        'Timestamp': int(time.time()),
-                        'Type': 'PublicS3Remediation',
-                        'TargetBucket': bucket_name
-                    }
-                )
-                print(f"✅ Remediation completed successfully for {bucket_name}")
-            except Exception as e:
-                print(f"Error executing remediation loop: {str(e)}")
-      Policies:
-        - Statement:
-            - Sid: S3RemediationPolicy
-              Effect: Allow
-              Action:
-                - s3:PutBucketPublicAccessBlock
-                - s3:GetBucketPublicAccessBlock
-              Resource: "*"
-            - Sid: SNSPublishPolicy
-              Effect: Allow
-              Action:
-                - sns:Publish
-              Resource: !Ref SecurityAlertTopic
-            - Sid: DynamoDBMetricLogPolicy
-              Effect: Allow
-              Action:
-                - dynamodb:PutItem
-              Resource: !GetAtt SiemMetricsTable.Arn
-
-  S3SecurityEventRule:
-    Type: AWS::Events::Rule
-    Properties:
-      Name: DetectPublicS3Changes
-      Description: Monitors CloudTrail events for public S3 modifications
-      State: ENABLED
-      EventPattern:
-        source:
-          - aws.s3
-        detail-type:
-          - AWS API Call via CloudTrail
-        detail:
-          eventName:
-            - PutBucketAcl
-            - PutBucketPolicy
-            - PutBucketPublicAccessBlock
-      Targets:
-        - Arn: !GetAtt SecurityRemediationFunction.Arn
-          Id: "TargetLambda"
-
-  PermissionForEventsToInvokeSecurityLambda:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !Ref SecurityRemediationFunction
-      Action: lambda:InvokeFunction
-      Principal: events.amazonaws.com
-      SourceArn: !GetAtt S3SecurityEventRule.Arn
-
-# =========================================================================
-# OUTPUT DATA FOR FRONTEND INTEGRATION
-# =========================================================================
 Outputs:
-  FetchCounterApi:
-    Description: "API Gateway Endpoint URL to paste into your index.html script"
-    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com/"
+  DashboardApiUrl:
+    Description: "Base URL to paste into your index.html script"
+    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+  TargetVictimBucket:
+    Description: "Bucket Name to paste into simulate_attack.py"
+    Value: !Sub "siem-simulation-victim-${AWS::AccountId}-${AWS::Region}"
+
 
 ```
