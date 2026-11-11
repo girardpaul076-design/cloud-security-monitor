@@ -11,7 +11,7 @@ print(f"🚀 Initializing Intrusion Simulation on target: {TARGET_BUCKET}...")
 try:
     # Intentionally flipping ACL to public exposure to activate the monitoring loops
     s3.put_bucket_acl(
-        Bucket=TARGET_BUCKET,
+        Bucket= "siem-test-bucket-paul",
         ACL='public-read'
     )
     print("🔥 Vulnerability Exploited! ACL changed to public-read.")
