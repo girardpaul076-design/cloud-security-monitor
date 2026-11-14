@@ -160,3 +160,41 @@ def lambda_handler(event, context):
       'headers': cors_headers,
       'body': json.dumps({'message': 'Endpoint not found'}),
   }
+name: Deploy Cloud Security Monitor Stack
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy-security-stack:
+    runs-on: ubuntu-24.04
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Setup AWS SAM CLI Tooling
+      uses: aws-actions/setup-sam@v2
+      with:
+        use-installer: true
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-2
+
+    - name: Build Serverless Application Assets
+      run: sam build --template template.yaml
+
+    - name: Package and Deploy Security IaC Stack
+      run: |
+        sam deploy --no-confirm-changeset \
+          --no-fail-on-empty-changeset \
+          --stack-name cloud-security-monitor-stack \
+          --s3-bucket siem-test-bucket-paul \
+          --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND \
+          --parameter-overrides IpHashSalt=${{ secrets.IP_HASH_SALT }} \
+          --region us-east-2
