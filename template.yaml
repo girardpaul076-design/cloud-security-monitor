@@ -2,6 +2,13 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: Unified Cloud Resume and SIEM Compliance Security Monitor Backend
 
+Parameters:
+  IpHashSalt:
+    Type: String
+    NoEcho: true
+    Default: "default-change-in-github-secrets"
+    Description: Secret salt used to hash visitor IP addresses for privacy-safe SIEM correlation
+
 Globals:
   HttpApi:
     CorsConfiguration:
@@ -10,16 +17,36 @@ Globals:
       AllowOrigins: ['*']
 
 Resources:
-  # 1. High-Performance SIEM Datastore
+  # 1. Visitor Counter & 24h Deduplication Datastore (with Auto-Cleanup TTL)
   ResumeTable:
-    Type: AWS::Serverless::SimpleTable
+    Type: AWS::DynamoDB::Table
     Properties:
       TableName: cloud-resume-stats
-      PrimaryKey:
-        Name: id
-        Type: String
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
 
-  # 2. Test S3 Bucket Used for Intrusion Simulations
+  # 2. SIEM Security Incidents & Simulated Attacks Datastore
+  SiemMetricsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: SiemMetricsTable
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+
+  # 3. Test S3 Bucket Used for Intrusion Simulations
   SimulationVictimBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -30,77 +57,22 @@ Resources:
         BlockPublicPolicy: false
         RestrictPublicBuckets: false
 
-  # 3. Dual-Purpose Logic Handler (Visitor Tracking & Threat Remediation)
+  # 4. Dual-Purpose Logic Handler (Unique Visitor Tracking & SIEM Threat Remediation)
   ResumeCounterFunction:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: resume-visitor-counter-iac
-      Handler: index.lambda_handler
+      CodeUri: src/
+      Handler: lambda_function.lambda_handler
       Runtime: python3.12
-      InlineCode: |
-        import json
-        import boto3
-        import time
-        from datetime import datetime
-
-        s3 = boto3.client('s3')
-        dynamodb = boto3.resource('dynamodb')
-        table = dynamodb.Table('cloud-resume-stats')
-
-        def lambda_handler(event, context):
-            # Check if execution invocation initiated from an EventBridge Guard Duty/CloudTrail Rule
-            if "detail" in event:
-                detail = event["detail"]
-                bucket_name = detail.get("requestParameters", {}).get("bucketName")
-                
-                if bucket_name:
-                    # 1. Automate remediation back to 100% private
-                    try:
-                        s3.put_bucket_acl(Bucket=bucket_name, ACL='private')
-                        status_msg = "REMEDIATED"
-                    except Exception as e:
-                        status_msg = f"ERROR: {str(e)}"
-                    
-                    # 2. Append incident log record to the dashboard datastore
-                    incident_id = f"ALERT-{int(time.time())}"
-                    table.put_item(
-                        Item={
-                            'id': incident_id,
-                            'timestamp': datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'),
-                            'bucket_name': bucket_name,
-                            'event_type': 'PutBucketAcl (Public Exposure Event)',
-                            'status': status_msg
-                        }
-                    )
-                    return {"status": "complete", "incident_id": incident_id}
-
-            # Handle standard web dashboard fetch routes
-            path = event.get('requestContext', {}).get('http', {}).get('path', '')
-            if 'resume-visitor-counter' in path:
-                response = table.update_item(
-                    Key={'id': 'visitors'},
-                    UpdateExpression='ADD #c :val',
-                    ExpressionAttributeNames={'#c': 'count'},
-                    ExpressionAttributeValues={':val': 1},
-                    ReturnValues='UPDATED_NEW'
-                )
-                return {
-                    'statusCode': 200,
-                    'headers': {'Content-Type': 'application/json'},
-                    'body': json.dumps({'count': int(response['Attributes']['count'])})
-                }
-            elif 'security-alerts' in path:
-                response = table.scan()
-                items = [i for i in response.get('Items', []) if i.get('id') != 'visitors']
-                return {
-                    'statusCode': 200,
-                    'headers': {'Content-Type': 'application/json'},
-                    'body': json.dumps({'alerts': items})
-                }
-            return {'statusCode': 404, 'body': 'Not Found'}
+      Environment:
+        Variables:
+          IP_HASH_SALT: !Ref IpHashSalt
       Policies:
         - DynamoDBCrudPolicy:
             TableName: cloud-resume-stats
+        - DynamoDBCrudPolicy:
+            TableName: SiemMetricsTable
         - S3CrudPolicy:
             BucketName: !Sub "siem-simulation-victim-${AWS::AccountId}-${AWS::Region}"
       Events:
@@ -109,12 +81,11 @@ Resources:
           Properties:
             Path: /resume-visitor-counter
             Method: get
-        SecurityAlertsEvent:
+        MetricsApiEvent:
           Type: HttpApi
           Properties:
-            Path: /security-alerts
+            Path: /metrics
             Method: get
-        # Automated Rule Trigger: Intercepts S3 configuration vulnerability exploits
         S3PublicBreachRule:
           Type: CloudWatchEvent
           Properties:
@@ -127,11 +98,8 @@ Resources:
 
 Outputs:
   DashboardApiUrl:
-    Description: "Base URL to paste into your index.html script"
+    Description: "Base URL to paste into your frontend/index.html script"
     Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com"
   TargetVictimBucket:
     Description: "Bucket Name to paste into simulate_attack.py"
     Value: !Sub "siem-simulation-victim-${AWS::AccountId}-${AWS::Region}"
-
-
-```
