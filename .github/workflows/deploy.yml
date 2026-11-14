@@ -37,7 +37,7 @@ jobs:
         sam deploy --no-confirm-changeset \
           --no-fail-on-empty-changeset \
           --stack-name cloud-security-monitor-stack \
-          --s3-bucket siem-test-bucket-paul \
+          --resolve-s3 \
           --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND \
           --parameter-overrides IpHashSalt="$SALT_VALUE" \
           --region us-east-2
