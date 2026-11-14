@@ -46,7 +46,7 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:service-role/AWSLambdaBasicExecutionRole
       Policies:
-        - PolicyName: DynamoDBAndS3Policy
+        - PolicyName: SecurityMonitorPermissions
           PolicyStatement:
             - Effect: Allow
               Action:
@@ -78,12 +78,9 @@ Resources:
           IP_HASH_SALT: !Ref IpHashSalt
       Code:
         ZipFile: |
-          import json
+          # Placeholder for initial deploy; GitHub Actions workflow will sync code file
           def lambda_handler(event, context):
-              return {
-                  "statusCode": 200,
-                  "body": json.dumps("Hello from Security Monitor!")
-              }
+              return {"statusCode": 200, "body": "Initialized"}
 
   HttpApi:
     Type: AWS::ApiGatewayV2::Api
