@@ -57,12 +57,34 @@ Resources:
                 - s3:PutBucketPublicAccessBlock
                 - s3:ListBucket
               Resource: '*'
-      Events:
-        ApiEvent:
-          Type: HttpApi
-          Properties:
-            Path: /{proxy+}
-            Method: ANY
+
+  ServerlessHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: $default
+
+  ApiRouteMapping:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ServerlessHttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SecurityMonitorFunction.Arn}/invocations"
+      PayloadFormatVersion: '2.0'
+
+  ApiPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref SecurityMonitorFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ServerlessHttpApi}/*/*"
+
+  ProxyRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ServerlessHttpApi
+      RouteKey: 'ANY /{proxy+}'
+      Target: !Sub "integrations/${ApiRouteMapping}"
 
 Outputs:
   ApiURL:
