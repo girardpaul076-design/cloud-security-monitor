@@ -1,22 +1,51 @@
-No, the Python logic, syntax structure, control flow, and dictionary formatting are all correct.
-
-However, the code contains **non-breaking spaces** in the indentation from being copied and pasted. Running this directly in AWS Lambda will trigger a Python `IndentationError`.
-
-Here is the cleaned-up version with standard spaces so it will run without errors:
-
-```python
 import json
 import boto3
-import os
+import uuid
+from datetime import datetime
 
 dynamodb = boto3.resource('dynamodb')
+s3 = boto3.client('s3')
 
 # Connect to both tables in your architecture
 visitor_table = dynamodb.Table('cloud-resume-stats')
 metrics_table = dynamodb.Table('SiemMetricsTable')
 
 def lambda_handler(event, context):
-    # Inspect the incoming request path to determine action
+    # --- ROUTE 0: EventBridge S3 Security Breach Handler ---
+    if event.get('source') == 'aws.s3' or 'detail' in event:
+        detail = event.get('detail', {})
+        event_name = detail.get('eventName')
+        request_params = detail.get('requestParameters', {})
+        bucket_name = request_params.get('bucketName')
+        
+        if event_name in ['PutBucketAcl', 'PutBucketPolicy'] and bucket_name:
+            print(f"🚨 Security Alert: Unauthorized public modification ({event_name}) detected on bucket: {bucket_name}")
+            
+            # Remediate: Force bucket ACL back to private
+            try:
+                s3.put_bucket_acl(Bucket=bucket_name, ACL='private')
+                print(f"🛡️ Successfully remediated: Reverted bucket {bucket_name} ACL to private.")
+            except Exception as e:
+                print(f"❌ Failed to remediate bucket ACL: {e}")
+            
+            # Log incident to SiemMetricsTable so /metrics can track it
+            try:
+                incident_id = str(uuid.uuid4())
+                metrics_table.put_item(
+                    Item={
+                        'id': incident_id,
+                        'timestamp': str(datetime.utcnow()),
+                        'eventName': event_name,
+                        'bucketName': bucket_name,
+                        'status': 'Remediated'
+                    }
+                )
+            except Exception as e:
+                print(f"❌ Failed to log metric to DynamoDB: {e}")
+                
+            return {'status': 'Remediated'}
+
+    # --- ROUTE 1 & 2: HTTP API Gateway Requests ---
     path = event.get('rawPath', '') or event.get('requestContext', {}).get('http', {}).get('path', '')
     
     headers = {
@@ -56,6 +85,7 @@ def lambda_handler(event, context):
         'statusCode': 404,
         'headers': headers,
         'body': json.dumps({'message': 'Endpoint not found'})
+    }
     }
 
 ```
