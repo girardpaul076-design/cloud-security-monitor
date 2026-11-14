@@ -1,4 +1,4 @@
-name: Deploy Cloud Security Monitor Stack
+name: Deploy cloud-security-monitor-v2
 
 on:
   push:
