@@ -31,9 +31,8 @@ jobs:
       env:
         IP_HASH_SALT: ${{ secrets.IP_HASH_SALT }}
       run: |
-        # Fallback safeguard if secret is blank
         SALT_VALUE="${IP_HASH_SALT:-fallback-dev-salt-12345}"
-        echo "Starting SAM deployment..."
+        echo "Starting clean SAM deployment..."
         sam deploy --no-confirm-changeset \
           --no-fail-on-empty-changeset \
           --stack-name cloud-security-monitor-stack \
