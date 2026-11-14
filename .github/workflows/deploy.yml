@@ -1,41 +1,20 @@
-name: Deploy Cloud Security Monitor Stack
-
-on:
-  push:
-    branches:
-      - main
-
-jobs:
-  deploy-security-stack:
-    runs-on: ubuntu-24.04
-    steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
-
-    - name: Setup AWS SAM CLI Tooling
-      uses: aws-actions/setup-sam@v2
-      with:
-        use-installer: true
-
-    - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: us-east-2
-
-    - name: Build Serverless Application Assets
-      run: sam build --template template.yaml
-
-    - name: Package and Deploy Security IaC Stack
+- name: Package and Deploy Security IaC Stack
       env:
         IP_HASH_SALT: ${{ secrets.IP_HASH_SALT }}
       run: |
         SALT_VALUE="${IP_HASH_SALT:-fallback-dev-salt-12345}"
-        echo "Deploying template directly..."
+        echo "Packaging and deploying stack..."
         
-        aws cloudformation deploy \
+        # Package local code and update template S3 URIs
+        aws cloudformation package \
           --template-file template.yaml \
+          --s3-bucket aws-sam-cli-managed-default-samclisourcebucket-kkjugswbaupu \
+          --output-template-file packaged-template.yaml \
+          --region us-east-2
+
+        # Deploy the S3-referenced package directly
+        aws cloudformation deploy \
+          --template-file packaged-template.yaml \
           --stack-name cloud-security-monitor-stack-v2 \
           --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND \
           --parameter-overrides IpHashSalt="$SALT_VALUE" \
