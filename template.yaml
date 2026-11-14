@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Cloud Resume & SIEM Compliance Monitor Stack
+Description: Cloud Resume & SIEM Security Monitor Stack
 
 Parameters:
   IpHashSalt:
@@ -63,19 +63,6 @@ Resources:
           Properties:
             Path: /{proxy+}
             Method: ANY
-        S3PublicExposureEvent:
-          Type: EventBridgeRule
-          Properties:
-            Pattern:
-              source:
-                - aws.s3
-              detail-type:
-                - AWS API Call via CloudTrail
-              detail:
-                eventName:
-                  - PutBucketAcl
-                  - PutBucketPolicy
-                  - PutBucketPublicAccessBlock
 
 Outputs:
   ApiURL:
