@@ -1,33 +1,24 @@
-name: Deploy Cloud Security Monitor Stack
-
-on:
-  push:
-    branches:
-      - main
-
-jobs:
-  deploy-security-stack:
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-2
-
-      - name: Deploy Native CloudFormation Stack
+- name: Deploy Native CloudFormation Stack with Python Code
         env:
           IP_HASH_SALT: ${{ secrets.IP_HASH_SALT }}
         run: |
           SALT_VALUE="${IP_HASH_SALT:-fallback-dev-salt-12345}"
+          
+          # Create deployment package
+          mkdir -p package
+          cp lambda_function.py package/
+          cd package && zip -r ../function.zip . && cd ..
+          
+          # Deploy template
           aws cloudformation deploy \
             --template-file template.yaml \
             --stack-name cloud-security-monitor-stack-v2 \
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
             --parameter-overrides IpHashSalt="$SALT_VALUE" \
-            --disable-rollback \
             --region us-east-2
+            
+          # Update Lambda code directly with the packaged script
+          aws lambda update-function-code \
+            --function-name SecurityMonitorFunction \
+            --zip-file fileb://function.zip \
+            --region us-east-2 || true
