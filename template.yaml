@@ -49,8 +49,14 @@ Resources:
             TableName: !Ref VisitorTable
         - DynamoDBCrudPolicy:
             TableName: !Ref MetricsTable
-        - S3AdminAccessPolicy:
-            BucketName: '*'
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:PutBucketAcl
+                - s3:PutBucketPolicy
+                - s3:PutBucketPublicAccessBlock
+                - s3:ListBucket
+              Resource: '*'
       Events:
         ApiEvent:
           Type: HttpApi
