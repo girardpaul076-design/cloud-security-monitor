@@ -1,24 +1,16 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Unified Cloud Resume and SIEM Compliance Security Monitor Backend
+Description: Cloud Resume & SIEM Compliance Monitor Stack
 
 Parameters:
   IpHashSalt:
     Type: String
+    Default: 'fallback-dev-salt'
+    Description: Secret salt used for privacy-safe visitor IP hashing.
     NoEcho: true
-    Default: "default-change-in-github-secrets"
-    Description: Secret salt used to hash visitor IP addresses for privacy-safe SIEM correlation
-
-Globals:
-  HttpApi:
-    CorsConfiguration:
-      AllowMethods: [GET, OPTIONS]
-      AllowHeaders: [Content-Type]
-      AllowOrigins: ['*']
 
 Resources:
-  # 1. Visitor Counter & 24h Deduplication Datastore (with Auto-Cleanup TTL)
-  ResumeTable:
+  VisitorTable:
     Type: AWS::DynamoDB::Table
     Properties:
       TableName: cloud-resume-stats
@@ -29,12 +21,8 @@ Resources:
       KeySchema:
         - AttributeName: id
           KeyType: HASH
-      TimeToLiveSpecification:
-        AttributeName: ttl
-        Enabled: true
 
-  # 2. SIEM Security Incidents & Simulated Attacks Datastore
-  SiemMetricsTable:
+  MetricsTable:
     Type: AWS::DynamoDB::Table
     Properties:
       TableName: SiemMetricsTable
@@ -46,63 +34,44 @@ Resources:
         - AttributeName: id
           KeyType: HASH
 
-  # 3. Test S3 Bucket Used for Intrusion Simulations
-  SimulationVictimBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Sub "siem-simulation-victim-${AWS::AccountId}-${AWS::Region}"
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: false
-        IgnorePublicAcls: false
-        BlockPublicPolicy: false
-        RestrictPublicBuckets: false
-
-  # 4. Dual-Purpose Logic Handler (Unique Visitor Tracking & SIEM Threat Remediation)
-  ResumeCounterFunction:
+  SecurityMonitorFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: resume-visitor-counter-iac
       CodeUri: src/
       Handler: lambda_function.lambda_handler
       Runtime: python3.12
+      Timeout: 10
       Environment:
         Variables:
           IP_HASH_SALT: !Ref IpHashSalt
       Policies:
         - DynamoDBCrudPolicy:
-            TableName: cloud-resume-stats
+            TableName: !Ref VisitorTable
         - DynamoDBCrudPolicy:
-            TableName: SiemMetricsTable
-        - S3CrudPolicy:
-            BucketName: !Sub "siem-simulation-victim-${AWS::AccountId}-${AWS::Region}"
+            TableName: !Ref MetricsTable
+        - S3AdminAccessPolicy:
+            BucketName: '*'
       Events:
-        CounterApiEvent:
+        ApiEvent:
           Type: HttpApi
           Properties:
-            Path: /resume-visitor-counter
-            Method: get
-        MetricsApiEvent:
-          Type: HttpApi
-          Properties:
-            Path: /metrics
-            Method: get
-        S3PublicBreachRule:
-          Type: CloudWatchEvent
+            Path: /{proxy+}
+            Method: ANY
+        S3PublicExposureEvent:
+          Type: EventBridgeRule
           Properties:
             Pattern:
-              source: ["aws.s3"]
-              detail-type: ["AWS API Call via CloudTrail"]
+              source:
+                - aws.s3
+              detail-type:
+                - AWS API Call via CloudTrail
               detail:
-                eventSource: ["s3.amazonaws.com"]
-                eventName: ["PutBucketAcl", "PutBucketPolicy"]
-                requestParameters:
-                  bucketName: 
-                    - !Sub "siem-simulation-victim-${AWS::AccountId}-${AWS::Region}"
+                eventName:
+                  - PutBucketAcl
+                  - PutBucketPolicy
+                  - PutBucketPublicAccessBlock
 
 Outputs:
-  DashboardApiUrl:
-    Description: "Base URL to paste into your frontend/index.html script"
+  ApiURL:
+    Description: "API Gateway HTTP API Endpoint URL"
     Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com"
-  TargetVictimBucket:
-    Description: "Bucket Name to paste into simulate_attack.py"
-    Value: !Sub "siem-simulation-victim-${AWS::AccountId}-${AWS::Region}"
