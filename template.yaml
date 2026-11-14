@@ -93,8 +93,11 @@ Resources:
               source: ["aws.s3"]
               detail-type: ["AWS API Call via CloudTrail"]
               detail:
-                eventSource: ["://amazonaws.com"]
+                eventSource: ["s3.amazonaws.com"]
                 eventName: ["PutBucketAcl", "PutBucketPolicy"]
+                requestParameters:
+                  bucketName: 
+                    - !Sub "siem-simulation-victim-${AWS::AccountId}-${AWS::Region}"
 
 Outputs:
   DashboardApiUrl:
