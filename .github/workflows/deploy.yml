@@ -31,10 +31,12 @@ jobs:
       env:
         IP_HASH_SALT: ${{ secrets.IP_HASH_SALT }}
       run: |
+        echo "Starting SAM deployment..."
         sam deploy --no-confirm-changeset \
           --no-fail-on-empty-changeset \
           --stack-name cloud-security-monitor-stack \
           --s3-bucket siem-test-bucket-paul \
           --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND \
           --parameter-overrides IpHashSalt="$IP_HASH_SALT" \
-          --region us-east-2
+          --region us-east-2 \
+          --debug
