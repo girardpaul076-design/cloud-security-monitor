@@ -35,7 +35,7 @@ jobs:
         echo "Starting clean SAM deployment..."
         sam deploy --no-confirm-changeset \
           --no-fail-on-empty-changeset \
-          --stack-name cloud-security-monitor-stack \
+          --stack-name cloud-security-monitor-stack-v2 \
           --resolve-s3 \
           --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND \
           --parameter-overrides IpHashSalt="$SALT_VALUE" \
