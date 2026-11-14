@@ -32,18 +32,10 @@ jobs:
         IP_HASH_SALT: ${{ secrets.IP_HASH_SALT }}
       run: |
         SALT_VALUE="${IP_HASH_SALT:-fallback-dev-salt-12345}"
-        echo "Deploying via native AWS CloudFormation..."
+        echo "Deploying template directly..."
         
-        # Package template artifacts manually
-        aws cloudformation package \
-          --template-file template.yaml \
-          --s3-bucket aws-sam-cli-managed-default-samclisourcebucket-kkjugswbaupu \
-          --output-template-file packaged-template.yaml \
-          --region us-east-2
-
-        # Deploy the packaged template directly
         aws cloudformation deploy \
-          --template-file packaged-template.yaml \
+          --template-file template.yaml \
           --stack-name cloud-security-monitor-stack-v2 \
           --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND \
           --parameter-overrides IpHashSalt="$SALT_VALUE" \
