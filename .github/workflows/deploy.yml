@@ -1,48 +1,127 @@
-name: Deploy Cloud Security Monitor Stack
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Cloud Resume & SIEM Security Monitor Stack (Native CloudFormation)
 
-on:
-  push:
-    branches:
-      - main
+Parameters:
+  IpHashSalt:
+    Type: String
+    Default: 'fallback-dev-salt'
+    Description: Secret salt used for privacy-safe visitor IP hashing.
+    NoEcho: true
 
-jobs:
-  deploy-security-stack:
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+Resources:
+  VisitorTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: cloud-resume-stats
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
 
-      - name: Setup AWS SAM CLI Tooling
-        uses: aws-actions/setup-sam@v2
-        with:
-          use-installer: true
+  MetricsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: SiemMetricsTable
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-2
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DynamoDBAndS3Policy
+          PolicyStatement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:Query
+                - dynamodb:Scan
+              Resource:
+                - !GetAtt VisitorTable.Arn
+                - !GetAtt MetricsTable.Arn
+            - Effect: Allow
+              Action:
+                - s3:PutBucketAcl
+                - s3:PutBucketPolicy
+                - s3:PutBucketPublicAccessBlock
+                - s3:ListBucket
+              Resource: '*'
 
-      - name: Build Serverless Application Assets
-        run: sam build --template template.yaml
+  SecurityMonitorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Runtime: python3.12
+      Timeout: 10
+      Environment:
+        Variables:
+          IP_HASH_SALT: !Ref IpHashSalt
+      Code:
+        ZipFile: |
+          import json
+          def lambda_handler(event, context):
+              return {
+                  "statusCode": 200,
+                  "body": json.dumps("Hello from Security Monitor!")
+              }
 
-      - name: Package and Deploy Security IaC Stack
-        env:
-          IP_HASH_SALT: ${{ secrets.IP_HASH_SALT }}
-        run: |
-          SALT_VALUE="${IP_HASH_SALT:-fallback-dev-salt-12345}"
-          echo "Packaging and deploying stack..."
-          
-          aws cloudformation package \
-            --template-file template.yaml \
-            --s3-bucket aws-sam-cli-managed-default-samclisourcebucket-kkjugswbaupu \
-            --output-template-file packaged-template.yaml \
-            --region us-east-2
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: cloud-security-monitor-api
+      ProtocolType: HTTP
 
-          aws cloudformation deploy \
-            --template-file packaged-template.yaml \
-            --stack-name cloud-security-monitor-stack-v2 \
-            --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND \
-            --parameter-overrides IpHashSalt="$SALT_VALUE" \
-            --region us-east-2
+  ApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: '$default'
+      AutoDeploy: true
+
+  ApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SecurityMonitorFunction.Arn}/invocations"
+      PayloadFormatVersion: '2.0'
+
+  ApiRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: 'ANY /{proxy+}'
+      Target: !Sub "integrations/${ApiIntegration}"
+
+  LambdaApiPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref SecurityMonitorFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*/*"
+
+Outputs:
+  ApiURL:
+    Description: "API Gateway HTTP API Endpoint URL"
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com"
