@@ -64,6 +64,7 @@ Resources:
                 - s3:PutBucketPolicy
                 - s3:PutBucketPublicAccessBlock
                 - s3:ListBucket
+                - s3:GetBucketLocation
               Resource: '*'
 
   SecurityMonitorFunction:
