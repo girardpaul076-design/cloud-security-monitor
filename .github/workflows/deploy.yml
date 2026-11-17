@@ -18,6 +18,10 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-2
 
+      - name: Validate CloudFormation Template
+        run: |
+          aws cloudformation validate-template --template-file template.yaml
+
       - name: Deploy Native CloudFormation Stack with Python Code
         env:
           IP_HASH_SALT: ${{ secrets.IP_HASH_SALT }}
