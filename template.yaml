@@ -1,11 +1,11 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Cloud Resume & SIEM Security Monitor Stack (Native CloudFormation)
+Description: Streamlined Cloud Security Monitor Stack
 
 Parameters:
   IpHashSalt:
     Type: String
-    Default: 'fallback-dev-salt'
-    Description: Secret salt used for privacy-safe visitor IP hashing.
+    Default: 'fallback-dev-salt-12345'
+    Description: Secret salt for hashing visitor IPs.
     NoEcho: true
 
 Resources:
@@ -58,18 +58,11 @@ Resources:
               Resource:
                 - !GetAtt VisitorTable.Arn
                 - !GetAtt MetricsTable.Arn
-            - Effect: Allow
-              Action:
-                - s3:PutBucketAcl
-                - s3:PutBucketPolicy
-                - s3:PutBucketPublicAccessBlock
-                - s3:ListBucket
-                - s3:GetBucketLocation
-              Resource: '*'
 
   SecurityMonitorFunction:
     Type: AWS::Lambda::Function
     Properties:
+      FunctionName: SecurityMonitorFunction
       Handler: lambda_function.lambda_handler
       Role: !GetAtt LambdaExecutionRole.Arn
       Runtime: python3.12
@@ -79,7 +72,6 @@ Resources:
           IP_HASH_SALT: !Ref IpHashSalt
       Code:
         ZipFile: |
-          # Placeholder for initial deploy; GitHub Actions workflow will sync code file
           def lambda_handler(event, context):
               return {"statusCode": 200, "body": "Initialized"}
 
