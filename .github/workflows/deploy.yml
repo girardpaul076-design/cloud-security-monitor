@@ -20,7 +20,7 @@ jobs:
 
       - name: Validate CloudFormation Template
         run: |
-          aws cloudformation validate-template --template-file template.yaml
+          aws cloudformation validate-template --template-body file://template.yaml
 
       - name: Deploy Native CloudFormation Stack with Python Code
         env:
