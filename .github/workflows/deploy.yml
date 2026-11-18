@@ -47,7 +47,6 @@ jobs:
           
           aws cloudformation deploy \
             --template-file packaged-template.yaml \
-            --stack-name cloud-security-monitor-stack-v2 \
+            --stack-name security-monitor-v3 \
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
-            --parameter-overrides IpHashSalt="$SALT_VALUE" \
-            --region us-east-2
+            --parameter-overrides IpHashSalt="$SALT_VALUE"
