@@ -33,12 +33,25 @@ jobs:
           cp src/lambda_function.py package/
           cd package && zip -r ../function.zip . && cd ..
           
-          # Deploy template
-          aws cloudformation deploy \
-            --template-file template.yaml \
+          # Create changeset explicitly to catch any detailed errors
+          aws cloudformation create-change-set \
             --stack-name cloud-security-monitor-stack-v2 \
+            --template-body file://template.yaml \
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
-            --parameter-overrides IpHashSalt="$SALT_VALUE" \
+            --parameter-overrides ParameterKey=IpHashSalt,ParameterValue="$SALT_VALUE" \
+            --change-set-name deployment-changeset \
+            --region us-east-2
+            
+          echo "Waiting for change set to build..."
+          aws cloudformation wait change-set-create-complete \
+            --stack-name cloud-security-monitor-stack-v2 \
+            --change-set-name deployment-changeset \
+            --region us-east-2
+            
+          # Execute the change set
+          aws cloudformation execute-change-set \
+            --stack-name cloud-security-monitor-stack-v2 \
+            --change-set-name deployment-changeset \
             --region us-east-2
             
           # Update Lambda code directly with the packaged script
