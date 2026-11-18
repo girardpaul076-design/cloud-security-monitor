@@ -71,6 +71,9 @@ Resources:
         Variables:
           IP_HASH_SALT: !Ref IpHashSalt
       Code: src/
+         
+          def lambda_handler(event, context):
+              return {"statusCode": 200, "body": "Initialized"}
 
   HttpApi:
     Type: AWS::ApiGatewayV2::Api
