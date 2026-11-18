@@ -1,6 +1,30 @@
-- name: Deploy Native CloudFormation Stack with Diagnostic Change Set
-        env:
-          IP_HASH_SALT: ${{ secrets.IP_HASH_SALT }}
+name: Deploy CloudFormation Stack
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    env:
+      IP_HASH_SALT: ${{ secrets.IP_HASH_SALT }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-2
+
+      - name: Validate CloudFormation Template
+        run: |
+          aws cloudformation validate-template --template-body file://template.yaml
+
+      - name: Deploy Native CloudFormation Stack
         run: |
           SALT_VALUE="${IP_HASH_SALT:-fallback-dev-salt-12345}"
           
@@ -9,23 +33,16 @@
           cp src/lambda_function.py package/
           cd package && zip -r ../function.zip . && cd ..
           
-          # 1. Create a named change set using --template-body
-          aws cloudformation create-change-set \
+          # Deploy template cleanly
+          aws cloudformation deploy \
+            --template-file template.yaml \
             --stack-name cloud-security-monitor-stack-v2 \
-            --template-body file://template.yaml \
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
-            --parameters ParameterKey=IpHashSalt,ParameterValue="$SALT_VALUE" \
-            --change-set-name diagnostic-set \
-            --region us-east-2 || true
+            --parameter-overrides IpHashSalt="$SALT_VALUE" \
+            --region us-east-2
             
-          # 2. Wait for it to evaluate
-          aws cloudformation wait change-set-create-complete \
-            --stack-name cloud-security-monitor-stack-v2 \
-            --change-set-name diagnostic-set \
-            --region us-east-2 || true
-            
-          # 3. Print the exact validation error description to logs
-          aws cloudformation describe-change-set \
-            --stack-name cloud-security-monitor-stack-v2 \
-            --change-set-name diagnostic-set \
+          # Update Lambda code directly with the packaged script
+          aws lambda update-function-code \
+            --function-name SecurityMonitorFunction \
+            --zip-file fileb://function.zip \
             --region us-east-2 || true
