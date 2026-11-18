@@ -33,12 +33,12 @@ jobs:
           cp src/lambda_function.py package/
           cd package && zip -r ../function.zip . && cd ..
           
-          # Create changeset explicitly to catch any detailed errors
+          # Create changeset explicitly with correct --parameters flag
           aws cloudformation create-change-set \
             --stack-name cloud-security-monitor-stack-v2 \
             --template-body file://template.yaml \
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
-            --parameter-overrides ParameterKey=IpHashSalt,ParameterValue="$SALT_VALUE" \
+            --parameters ParameterKey=IpHashSalt,ParameterValue="$SALT_VALUE" \
             --change-set-name deployment-changeset \
             --region us-east-2
             
