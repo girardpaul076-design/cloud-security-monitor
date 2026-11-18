@@ -63,16 +63,21 @@ Resources:
 
   SecurityMonitorFunction:
     Type: AWS::Lambda::Function
-    Properties:
-      FunctionName: security-monitor-function-v2
-      Handler: lambda_function.lambda_handler
-      Role: !GetAtt LambdaExecutionRole.Arn
-      Runtime: python3.12
+    
+      
+      
+      
+      Runtime: 
       Timeout: 10
       Environment:
         Variables:
           IP_HASH_SALT: !Ref IpHashSalt
+<<<<<<< HEAD
       Code: src/
+=======
+      
+
+>>>>>>> aac17c473276aec38f7999a2327210d97abe542f
   HttpApi:
     Type: AWS::ApiGatewayV2::Api
     Properties:
