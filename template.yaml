@@ -93,7 +93,7 @@ Resources:
     Properties:
       ApiId: !Ref HttpApi
       IntegrationType: AWS_PROXY
-      IntegrationUri: !GetAtt SecurityMonitorFunction.Arn
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SecurityMonitorFunction.Arn}/invocations"
       PayloadFormatVersion: '2.0'
 
   ApiRoute:
