@@ -2,109 +2,115 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: Streamlined Cloud Security Monitor Stack
 
 Parameters:
-  IpHashSalt:
-    Type: String
-    Default: 'fallback-dev-salt-12345'
-    Description: Secret salt for hashing visitor IPs.
-    NoEcho: true
+IpHashSalt:
+Type: String
+Default: 'fallback-dev-salt-12345'
+Description: Secret salt for hashing visitor IPs.
+NoEcho: true
 
 Resources:
-  VisitorTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: security-monitor-function-v2
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-        - AttributeName: id
-          AttributeType: S
-      KeySchema:
-        - AttributeName: id
-          KeyType: HASH
+VisitorTable:
+Type: AWS::DynamoDB::Table
+Properties:
+  TableName: security-monitor-function-v2
+  BillingMode: PAY_PER_REQUEST
+  AttributeDefinitions:
+    - AttributeName: id
+      AttributeType: S
+  KeySchema:
+    - AttributeName: id
+      KeyType: HASH
 
-  MetricsTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: SiemMetricsTable
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-        - AttributeName: id
-          AttributeType: S
-      KeySchema:
-        - AttributeName: id
-          KeyType: HASH
+MetricsTable:
+Type: AWS::DynamoDB::Table
+Properties:
+  TableName: SiemMetricsTable
+  BillingMode: PAY_PER_REQUEST
+  AttributeDefinitions:
+    - AttributeName: id
+      AttributeType: S
+  KeySchema:
+    - AttributeName: id
+      KeyType: HASH
 
-  LambdaExecutionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
+LambdaExecutionRole:
+Type: AWS::IAM::Role
+Properties:
+  AssumeRolePolicyDocument:
+    Version: '2012-10-17'
+    Statement:
+      - Effect: Allow
+        Principal:
+          Service: lambda.amazonaws.com
+        Action: sts:AssumeRole
+  ManagedPolicyArns:
+    - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+  Policies:
+    - PolicyName: SecurityMonitorPermissions
+      PolicyDocument:
         Version: '2012-10-17'
         Statement:
           - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-      Policies:
-        - PolicyName: SecurityMonitorPermissions
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - dynamodb:GetItem
-                  - dynamodb:PutItem
-                  - dynamodb:UpdateItem
-                  - dynamodb:Query
-                  - dynamodb:Scan
-                Resource:
-                  - !GetAtt VisitorTable.Arn
-                  - !GetAtt MetricsTable.Arn
+            Action:
+              - dynamodb:GetItem
+              - dynamodb:PutItem
+              - dynamodb:UpdateItem
+              - dynamodb:Query
+              - dynamodb:Scan
+            Resource:
+              - !GetAtt VisitorTable.Arn
+              - !GetAtt MetricsTable.Arn
 
-  SecurityMonitorFunction:
-    Type: AWS::Lambda::Function
-    Properties:
-      FunctionName: security-monitor-function-v2
-      Handler: lambda_function.lambda_handler
-      Role: !GetAtt LambdaExecutionRole.Arn
-      Runtime: python3.12
-      Timeout: 10
-      Environment:
-        Variables:
-          IP_HASH_SALT: !Ref IpHashSalt
-      Code: src/
+SecurityMonitorFunction:
+Type: AWS::Lambda::Function
+Properties:
+  FunctionName: security-monitor-function-v2
+  Handler: lambda_function.lambda_handler
+  Role: !GetAtt LambdaExecutionRole.Arn
+  Runtime: python3.12
+  Timeout: 10
+  Environment:
+    Variables:
+      IP_HASH_SALT: !Ref IpHashSalt
+  Code: src/
 
-  ApiStage:
-    Type: AWS::ApiGatewayV2::Stage
+HttpApi:
+    Type: AWS::ApiGatewayV2::Api
     Properties:
-      ApiId: !Ref HttpApi
-      StageName: '$default'
-      AutoDeploy: true
+      Name: cloud-security-monitor-api
+      ProtocolType: HTTP
 
-  ApiIntegration:
-    Type: AWS::ApiGatewayV2::Integration
-    Properties:
-      ApiId: !Ref HttpApi
-      IntegrationType: AWS_PROXY
-      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SecurityMonitorFunction.Arn}/invocations"
-      PayloadFormatVersion: '2.0'
+ApiStage:
+Type: AWS::ApiGatewayV2::Stage
+Properties:
+  ApiId: !Ref HttpApi
+  StageName: '$default'
+  AutoDeploy: true
 
-  ApiRoute:
-    Type: AWS::ApiGatewayV2::Route
-    Properties:
-      ApiId: !Ref HttpApi
-      RouteKey: 'ANY /{proxy+}'
-      Target: !Sub "integrations/${ApiIntegration}"
+ApiIntegration:
+Type: AWS::ApiGatewayV2::Integration
+Properties:
+  ApiId: !Ref HttpApi
+  IntegrationType: AWS_PROXY
+  IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SecurityMonitorFunction.Arn}/invocations"
+  PayloadFormatVersion: '2.0'
 
-  LambdaApiPermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !Ref SecurityMonitorFunction
-      Principal: apigateway.amazonaws.com
-      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*/*"
+ApiRoute:
+Type: AWS::ApiGatewayV2::Route
+Properties:
+  ApiId: !Ref HttpApi
+  RouteKey: 'ANY /{proxy+}'
+  Target: !Sub "integrations/${ApiIntegration}"
+
+LambdaApiPermission:
+Type: AWS::Lambda::Permission
+Properties:
+  Action: lambda:InvokeFunction
+  FunctionName: !Ref SecurityMonitorFunction
+  Principal: apigateway.amazonaws.com
+  SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*/*"
 
 Outputs:
-  ApiURL:
-    Description: "API Gateway HTTP API Endpoint URL"
-    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+ApiURL:
+Description: "API Gateway HTTP API Endpoint URL"
+Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com"
