@@ -9,7 +9,6 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       IP_HASH_SALT: ${{ secrets.IP_HASH_SALT }}
-      DEPLOY_BUCKET: cloud-security-monitor-deploy-artifacts-${{ secrets.AWS_ACCOUNT_ID_OR_RANDOM_SUFFIX }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -23,7 +22,6 @@ jobs:
 
       - name: Ensure Deployment S3 Bucket Exists
         run: |
-          # Use your AWS Account ID or a unique string for bucket global uniqueness
           ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
           BUCKET_NAME="cloud-security-monitor-artifacts-${ACCOUNT_ID}-us-east-2"
           echo "DEPLOY_BUCKET=$BUCKET_NAME" >> $GITHUB_ENV
@@ -42,8 +40,6 @@ jobs:
             --s3-bucket "$DEPLOY_BUCKET" \
             --output-template-file packaged-template.yaml \
             --region us-east-2
-          
-          *Verification:* A `packaged-template.yaml` is successfully generated with transformed S3 artifact URIs.
 
       - name: Deploy Packaged Stack
         run: |
@@ -55,5 +51,3 @@ jobs:
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
             --parameter-overrides IpHashSalt="$SALT_VALUE" \
             --region us-east-2
-          
-          *Verification:* The GitHub Actions run outputs `Successfully created/updated stack` and shows `CREATE_COMPLETE` in the AWS CloudFormation console.
