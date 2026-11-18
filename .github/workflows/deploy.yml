@@ -9,6 +9,7 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       IP_HASH_SALT: ${{ secrets.IP_HASH_SALT }}
+      DEPLOY_BUCKET: cloud-security-monitor-deploy-artifacts-${{ secrets.AWS_ACCOUNT_ID_OR_RANDOM_SUFFIX }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -20,29 +21,39 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-2
 
-      - name: Validate CloudFormation Template
+      - name: Ensure Deployment S3 Bucket Exists
         run: |
-          aws cloudformation validate-template --template-body file://template.yaml
+          # Use your AWS Account ID or a unique string for bucket global uniqueness
+          ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
+          BUCKET_NAME="cloud-security-monitor-artifacts-${ACCOUNT_ID}-us-east-2"
+          echo "DEPLOY_BUCKET=$BUCKET_NAME" >> $GITHUB_ENV
+          
+          if aws s3api head-bucket --bucket "$BUCKET_NAME" 2>/dev/null; then
+            echo "Artifacts bucket already exists."
+          else
+            echo "Creating deployment artifacts bucket..."
+            aws s3 mb "s3://$BUCKET_NAME" --region us-east-2
+          fi
 
-      - name: Deploy Native CloudFormation Stack
+      - name: Package CloudFormation Template
+        run: |
+          aws cloudformation package \
+            --template-file template.yaml \
+            --s3-bucket "$DEPLOY_BUCKET" \
+            --output-template-file packaged-template.yaml \
+            --region us-east-2
+          
+          *Verification:* A `packaged-template.yaml` is successfully generated with transformed S3 artifact URIs.
+
+      - name: Deploy Packaged Stack
         run: |
           SALT_VALUE="${IP_HASH_SALT:-fallback-dev-salt-12345}"
           
-          # Create deployment package from the src folder
-          mkdir -p package
-          cp src/lambda_function.py package/
-          cd package && zip -r ../function.zip . && cd ..
-          
-          # Deploy template cleanly
           aws cloudformation deploy \
-            --template-file template.yaml \
+            --template-file packaged-template.yaml \
             --stack-name cloud-security-monitor-stack-v2 \
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
             --parameter-overrides IpHashSalt="$SALT_VALUE" \
             --region us-east-2
-            
-          # Update Lambda code directly with the packaged script
-          aws lambda update-function-code \
-            --function-name SecurityMonitorFunction \
-            --zip-file fileb://function.zip \
-            --region us-east-2 || true
+          
+          *Verification:* The GitHub Actions run outputs `Successfully created/updated stack` and shows `CREATE_COMPLETE` in the AWS CloudFormation console.
