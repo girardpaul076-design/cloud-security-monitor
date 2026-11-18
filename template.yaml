@@ -74,6 +74,10 @@ Resources:
         Variables:
           IP_HASH_SALT: !Ref IpHashSalt
       Code: src/
+    DependsOn:
+      - LambdaExecutionRole
+      - VisitorTable
+      - MetricsTable
 
   HttpApi:
     Type: AWS::ApiGatewayV2::Api
