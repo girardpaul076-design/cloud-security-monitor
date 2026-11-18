@@ -1,4 +1,4 @@
-AWSTemplateFormatVersion: '2010-09-09'
+﻿AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: Streamlined Cloud Security Monitor Stack
 
@@ -70,6 +70,8 @@ Resources:
       Environment:
         Variables:
           IP_HASH_SALT: !Ref IpHashSalt
+          VISITOR_TABLE: !Ref VisitorTable
+          METRICS_TABLE: !Ref MetricsTable
       Code: src/
     DependsOn:
       - LambdaExecutionRole
