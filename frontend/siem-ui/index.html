@@ -5,23 +5,92 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Serverless SIEM Dashboard</title>
   <style>
-    body { font-family: Arial, sans-serif; background: #0f172a; color: #e2e8f0; margin: 2rem; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
-    .card { background: #1e293b; padding: 1rem 1.25rem; border-radius: 8px; border: 1px solid #334155; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: Arial, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      margin: 2rem;
+    }
+    .header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+    }
+    h1 { margin: 0; }
+    button {
+      background: #0284c7;
+      color: #ffffff;
+      border: none;
+      padding: 0.55rem 0.95rem;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    button:hover { background: #0369a1; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .card {
+      background: #1e293b;
+      padding: 1rem 1.25rem;
+      border-radius: 8px;
+      border: 1px solid #334155;
+    }
     .label { font-size: 0.85rem; color: #94a3b8; }
-    .value { font-size: 1.6rem; font-weight: bold; margin-top: 0.35rem; color: #38bdf8; }
-    table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 8px; overflow: hidden; }
-    th, td { padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid #334155; font-size: 0.9rem; }
+    .value {
+      font-size: 1.6rem;
+      font-weight: bold;
+      margin-top: 0.35rem;
+      color: #38bdf8;
+    }
+    .value.ok { color: #4ade80; }
+    .value.alert { color: #f87171; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #1e293b;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    th, td {
+      padding: 0.75rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid #334155;
+      font-size: 0.9rem;
+      word-break: break-word;
+    }
     th { background: #0f172a; color: #94a3b8; }
+    .badge {
+      display: inline-block;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.78rem;
+      font-weight: bold;
+      background: #7f1d1d;
+      color: #fecaca;
+    }
   </style>
 </head>
 <body>
-  <h1>Serverless SIEM Console</h1>
+  <div class="header-row">
+    <h1>Serverless SIEM Console</h1>
+    <button type="button" id="refresh-btn">Refresh Telemetry</button>
+  </div>
+
   <div class="grid">
     <div class="card"><div class="label">Monitor Status</div><div class="value" id="status">Standby</div></div>
     <div class="card"><div class="label">Flagged Scans</div><div class="value" id="threats">0</div></div>
     <div class="card"><div class="label">Tracked Visitors</div><div class="value" id="visitors">0</div></div>
   </div>
+
   <table>
     <thead>
       <tr><th>Timestamp</th><th>Hashed IP</th><th>User-Agent</th><th>Severity</th></tr>
@@ -30,8 +99,100 @@
       <tr><td colspan="4">Awaiting backend connection...</td></tr>
     </tbody>
   </table>
+
   <script>
+    // Populate with ApiURL from the SAM stack output (no trailing slash)
     window.SIEM_API_URL = "";
+
+    function setTableRow(text) {
+      const tbody = document.getElementById("events-body");
+      tbody.innerHTML = "";
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 4;
+      td.textContent = text;
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+    }
+
+    function renderThreats(threats) {
+      const tbody = document.getElementById("events-body");
+      tbody.innerHTML = "";
+
+      if (!Array.isArray(threats) || threats.length === 0) {
+        setTableRow("No suspicious events recorded.");
+        return;
+      }
+
+      for (const item of threats) {
+        const tr = document.createElement("tr");
+
+        const tdTime = document.createElement("td");
+        tdTime.textContent = item.timestamp || "N/A";
+
+        const tdIp = document.createElement("td");
+        tdIp.textContent = item.hashed_ip || "N/A";
+
+        const tdUa = document.createElement("td");
+        tdUa.textContent = item.user_agent || "unknown";
+
+        const tdSev = document.createElement("td");
+        const badge = document.createElement("span");
+        badge.className = "badge";
+        badge.textContent = item.severity || "MEDIUM";
+        tdSev.appendChild(badge);
+
+        tr.append(tdTime, tdIp, tdUa, tdSev);
+        tbody.appendChild(tr);
+      }
+    }
+
+    async function loadTelemetry() {
+      const statusEl = document.getElementById("status");
+      const threatsEl = document.getElementById("threats");
+      const visitorsEl = document.getElementById("visitors");
+
+      const baseUrl = (window.SIEM_API_URL || "").trim().replace(/\/+$/, "");
+      if (!baseUrl) {
+        statusEl.textContent = "Standby";
+        statusEl.className = "value";
+        setTableRow("Awaiting backend connection (set window.SIEM_API_URL).");
+        return;
+      }
+
+      try {
+        const response = await fetch(`${baseUrl}/siem?view=siem`, { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        const threats = Array.isArray(data.threats) ? data.threats : [];
+        const threatCount =
+          typeof data.threat_count === "number" ? data.threat_count : threats.length;
+
+        visitorsEl.textContent = Number(data.visitor_count ?? 0);
+        threatsEl.textContent = threatCount;
+
+        if (threatCount > 0) {
+          statusEl.textContent = "Alerts Active";
+          statusEl.className = "value alert";
+        } else {
+          statusEl.textContent = "Active";
+          statusEl.className = "value ok";
+        }
+
+        renderThreats(threats);
+      } catch (err) {
+        console.error("Failed to load SIEM telemetry:", err);
+        statusEl.textContent = "Error";
+        statusEl.className = "value alert";
+        setTableRow(`Connection error: ${err.message}`);
+      }
+    }
+
+    document.getElementById("refresh-btn").addEventListener("click", loadTelemetry);
+    window.addEventListener("DOMContentLoaded", loadTelemetry);
   </script>
 </body>
 </html>
