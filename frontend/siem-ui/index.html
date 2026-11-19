@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Serverless SIEM Dashboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #0f172a; color: #e2e8f0; margin: 2rem; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+    .card { background: #1e293b; padding: 1rem 1.25rem; border-radius: 8px; border: 1px solid #334155; }
+    .label { font-size: 0.85rem; color: #94a3b8; }
+    .value { font-size: 1.6rem; font-weight: bold; margin-top: 0.35rem; color: #38bdf8; }
+    table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 8px; overflow: hidden; }
+    th, td { padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid #334155; font-size: 0.9rem; }
+    th { background: #0f172a; color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <h1>Serverless SIEM Console</h1>
+  <div class="grid">
+    <div class="card"><div class="label">Monitor Status</div><div class="value" id="status">Standby</div></div>
+    <div class="card"><div class="label">Flagged Scans</div><div class="value" id="threats">0</div></div>
+    <div class="card"><div class="label">Tracked Visitors</div><div class="value" id="visitors">0</div></div>
+  </div>
+  <table>
+    <thead>
+      <tr><th>Timestamp</th><th>Hashed IP</th><th>User-Agent</th><th>Severity</th></tr>
+    </thead>
+    <tbody id="events-body">
+      <tr><td colspan="4">Awaiting backend connection...</td></tr>
+    </tbody>
+  </table>
+  <script>
+    // Placeholder hook until your SIEM API endpoint is connected
+    window.SIEM_API_URL = "";
+  </script>
+</body>
+</html>
