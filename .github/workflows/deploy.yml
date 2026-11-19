@@ -3,11 +3,18 @@
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-security-monitor-v3
+  cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-24.04
     env:
+      AWS_REGION: us-east-2
+      AWS_DEFAULT_REGION: us-east-2
       IP_HASH_SALT: ${{ secrets.IP_HASH_SALT }}
     steps:
       - name: Checkout Repository
@@ -22,19 +29,31 @@ jobs:
 
       - name: Ensure Deployment S3 Bucket Exists
         run: |
+          set -euo pipefail
           ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
           BUCKET_NAME="cloud-security-monitor-artifacts-${ACCOUNT_ID}-us-east-2"
-          echo "DEPLOY_BUCKET=$BUCKET_NAME" >> $GITHUB_ENV
-          
+          echo "DEPLOY_BUCKET=$BUCKET_NAME" >> "$GITHUB_ENV"
+
           if aws s3api head-bucket --bucket "$BUCKET_NAME" 2>/dev/null; then
-            echo "Artifacts bucket already exists."
+            echo "Artifacts bucket already exists: $BUCKET_NAME"
           else
-            echo "Creating deployment artifacts bucket..."
-            aws s3 mb "s3://$BUCKET_NAME" --region us-east-2
+            echo "Creating deployment artifacts bucket: $BUCKET_NAME"
+            aws s3api create-bucket \
+              --bucket "$BUCKET_NAME" \
+              --region us-east-2 \
+              --create-bucket-configuration LocationConstraint=us-east-2
+            aws s3api put-bucket-versioning \
+              --bucket "$BUCKET_NAME" \
+              --versioning-configuration Status=Enabled
+            aws s3api put-public-access-block \
+              --bucket "$BUCKET_NAME" \
+              --public-access-block-configuration \
+                BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
           fi
 
       - name: Package CloudFormation Template
         run: |
+          set -euo pipefail
           aws cloudformation package \
             --template-file template.yaml \
             --s3-bucket "$DEPLOY_BUCKET" \
@@ -43,10 +62,19 @@ jobs:
 
       - name: Deploy Packaged Stack
         run: |
+          set -euo pipefail
           SALT_VALUE="${IP_HASH_SALT:-fallback-dev-salt-12345}"
-          
+
           aws cloudformation deploy \
             --template-file packaged-template.yaml \
             --stack-name security-monitor-v3 \
+            --region us-east-2 \
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
-            --parameter-overrides IpHashSalt="$SALT_VALUE"
+            --no-fail-on-empty-changeset \
+            --parameter-overrides "IpHashSalt=${SALT_VALUE}"
+
+          aws cloudformation describe-stacks \
+            --stack-name security-monitor-v3 \
+            --region us-east-2 \
+            --query "Stacks[0].Outputs" \
+            --output table
